@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/core/theme/app_colors.dart';
+import '../../../../shared/models/app_models.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
@@ -16,14 +17,15 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _phoneController = TextEditingController(text: '+233 24 567 8901');
+  final _identifierController = TextEditingController(text: '+233 24 567 8901');
   final _passwordController = TextEditingController(text: 'password123');
+  bool _rememberMe = false;
   bool _isLoading = false;
   String? _errorMessage;
 
   @override
   void dispose() {
-    _phoneController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -34,16 +36,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _isLoading = true;
       _errorMessage = null;
     });
+
     final success = await ref
         .read(authProvider.notifier)
-        .login(_phoneController.text, _passwordController.text);
-    if (mounted) {
-      setState(() => _isLoading = false);
-      if (success) {
+        .login(_identifierController.text, _passwordController.text);
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (success) {
+      final role = ref.read(userRoleProvider);
+      if (role == UserRole.agent) {
         context.go('/home');
       } else {
-        setState(() => _errorMessage = 'Invalid credentials. Please try again.');
+        context.go('/customer/home');
       }
+    } else {
+      setState(() => _errorMessage = 'Invalid credentials. Please try again.');
     }
   }
 
@@ -51,96 +60,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Hero header
-            Container(
-              width: double.infinity,
-              height: size.height * 0.35,
-              decoration: BoxDecoration(gradient: AppColors.heroGradient),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(28),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.agriculture_rounded,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'SoilTech',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                        ],
-                      )
-                          .animate()
-                          .fadeIn(duration: 500.ms)
-                          .slideX(begin: -0.1, end: 0),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Welcome back,\nAgent',
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          height: 1.2,
-                          letterSpacing: -0.5,
-                        ),
-                      )
-                          .animate(delay: 150.ms)
-                          .fadeIn(duration: 500.ms)
-                          .slideY(begin: 0.2, end: 0),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Sign in to continue your field operations',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white.withValues(alpha: 0.7),
-                        ),
-                      )
-                          .animate(delay: 250.ms)
-                          .fadeIn(duration: 400.ms),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 48),
 
-            // Form card
-            Transform.translate(
-              offset: const Offset(0, -24),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20),
+              // Logo
+              ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Image.asset(
+                  'assets/icons/soiltech_logo.jpeg',
+                  width: 90,
+                  height: 90,
+                  fit: BoxFit.cover,
+                ),
+              )
+                  .animate()
+                  .fadeIn(duration: 500.ms)
+                  .scale(begin: const Offset(0.7, 0.7)),
+
+              const SizedBox(height: 20),
+
+              Text(
+                'SoilTech',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary,
+                  letterSpacing: -0.5,
+                ),
+              ).animate(delay: 100.ms).fadeIn(duration: 400.ms),
+
+              const SizedBox(height: 6),
+
+              Text(
+                'Fresh produce, directly from the farm',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ).animate(delay: 150.ms).fadeIn(duration: 400.ms),
+
+              const SizedBox(height: 40),
+
+              // Form card
+              Container(
                 padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.cardDark : AppColors.cardLight,
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
+                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
                       blurRadius: 30,
                       offset: const Offset(0, 10),
                     ),
@@ -152,39 +127,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Sign In',
-                        style: theme.textTheme.headlineSmall?.copyWith(
+                        'Welcome back',
+                        style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Enter your credentials to access the platform',
+                        'Sign in to your account',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 24),
 
-                      // Phone field
                       AppTextField(
-                        label: 'Phone Number',
+                        label: 'Phone or Email',
                         hint: '+233 XX XXX XXXX',
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        prefixIcon: Icons.phone_outlined,
+                        controller: _identifierController,
+                        keyboardType: TextInputType.emailAddress,
+                        prefixIcon: Icons.person_outline_rounded,
                         textInputAction: TextInputAction.next,
                         validator: (v) {
-                          if (v == null || v.isEmpty) return 'Phone number required';
+                          if (v == null || v.trim().isEmpty) return 'Phone or email required';
                           return null;
                         },
-                      )
-                          .animate(delay: 300.ms)
-                          .fadeIn(duration: 400.ms)
-                          .slideY(begin: 0.1, end: 0),
-                      const SizedBox(height: 16),
+                      ).animate(delay: 200.ms).fadeIn().slideY(begin: 0.1, end: 0),
 
-                      // Password field
+                      const SizedBox(height: 14),
+
                       AppTextField(
                         label: 'Password',
                         hint: 'Enter your password',
@@ -198,34 +169,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           if (v.length < 6) return 'Password too short';
                           return null;
                         },
-                      )
-                          .animate(delay: 400.ms)
-                          .fadeIn(duration: 400.ms)
-                          .slideY(begin: 0.1, end: 0),
+                      ).animate(delay: 250.ms).fadeIn().slideY(begin: 0.1, end: 0),
 
-                      // Forgot password
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => context.push('/forgot-password'),
-                          child: const Text('Forgot Password?'),
-                        ),
-                      )
-                          .animate(delay: 450.ms)
-                          .fadeIn(duration: 300.ms),
+                      const SizedBox(height: 12),
 
-                      // Error message
+                      // Remember me + Forgot password row
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => setState(() => _rememberMe = !_rememberMe),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: Checkbox(
+                                    value: _rememberMe,
+                                    onChanged: (v) => setState(() => _rememberMe = v ?? false),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    activeColor: AppColors.primary,
+                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Remember me',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => context.push('/forgot-password'),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text('Forgot Password?', style: TextStyle(fontSize: 12)),
+                          ),
+                        ],
+                      ).animate(delay: 300.ms).fadeIn(),
+
                       if (_errorMessage != null) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 16),
                         Container(
-                          width: double.infinity,
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                           decoration: BoxDecoration(
                             color: AppColors.errorLight,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: AppColors.error.withValues(alpha: 0.3),
-                            ),
+                            border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
                           ),
                           child: Row(
                             children: [
@@ -244,97 +243,69 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ],
                           ),
                         ).animate().shake(duration: 400.ms),
-                        const SizedBox(height: 8),
                       ],
 
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 24),
 
-                      // Login button
                       AppButton(
                         label: 'Sign In',
                         onPressed: _isLoading ? null : _handleLogin,
                         isLoading: _isLoading,
                         icon: Icons.login_rounded,
-                      )
-                          .animate(delay: 500.ms)
-                          .fadeIn(duration: 400.ms)
-                          .slideY(begin: 0.1, end: 0),
-
-                      const SizedBox(height: 20),
-
-                      // OTP option
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Divider(
-                              color: theme.dividerColor,
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              'or',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          Expanded(child: Divider(color: theme.dividerColor)),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      AppButton(
-                        label: 'Sign in with OTP',
-                        variant: AppButtonVariant.outline,
-                        icon: Icons.sms_outlined,
-                        onPressed: () => context.push(
-                          '/otp?phone=${Uri.encodeComponent(_phoneController.text)}',
-                        ),
-                      )
-                          .animate(delay: 600.ms)
-                          .fadeIn(duration: 400.ms),
+                      ).animate(delay: 350.ms).fadeIn().slideY(begin: 0.1, end: 0),
                     ],
                   ),
                 ),
-              ),
-            )
-                .animate(delay: 200.ms)
-                .fadeIn(duration: 500.ms)
-                .slideY(begin: 0.1, end: 0),
+              ).animate(delay: 100.ms).fadeIn(duration: 500.ms).slideY(begin: 0.1, end: 0),
 
-            // Footer
-            Padding(
-              padding: const EdgeInsets.only(bottom: 32, top: 8),
-              child: Column(
+              const SizedBox(height: 28),
+
+              // Divider
+              Row(
                 children: [
-                  Text(
-                    'Protected by end-to-end encryption',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      "Don't have an account?",
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.lock_rounded, size: 12, color: AppColors.primary.withValues(alpha: 0.6)),
-                      const SizedBox(width: 4),
-                      Text(
-                        'SoilTech LBC v1.0.0',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.primary.withValues(alpha: 0.6),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                  Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+                ],
+              ).animate(delay: 450.ms).fadeIn(),
+
+              const SizedBox(height: 16),
+
+              AppButton(
+                label: 'Create an Account',
+                onPressed: () => context.push('/register'),
+                variant: AppButtonVariant.outline,
+                icon: Icons.person_add_outlined,
+              ).animate(delay: 500.ms).fadeIn().slideY(begin: 0.1, end: 0),
+
+              const SizedBox(height: 32),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.lock_rounded, size: 12, color: AppColors.primary.withValues(alpha: 0.5)),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Protected by end-to-end encryption  ·  SoilTech v1.0',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.primary.withValues(alpha: 0.5),
+                    ),
                   ),
                 ],
-              ),
-            )
-                .animate(delay: 700.ms)
-                .fadeIn(duration: 400.ms),
-          ],
+              ).animate(delay: 600.ms).fadeIn(),
+
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );

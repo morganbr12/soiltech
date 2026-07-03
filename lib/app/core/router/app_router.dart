@@ -1,6 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../features/auth/presentation/screens/splash_screen.dart';
 import '../../../features/auth/presentation/screens/login_screen.dart';
+import '../../../features/auth/presentation/screens/register_screen.dart';
 import '../../../features/auth/presentation/screens/otp_screen.dart';
 import '../../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../../features/dashboard/presentation/screens/dashboard_screen.dart';
@@ -14,12 +16,19 @@ import '../../../features/logistics/presentation/screens/logistics_screen.dart';
 import '../../../features/payments/presentation/screens/payments_screen.dart';
 import '../../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../../features/profile/presentation/screens/profile_screen.dart';
+import '../../../features/customer/home/presentation/screens/customer_home_screen.dart';
+import '../../../features/customer/orders/presentation/screens/orders_screen.dart';
+import '../../../features/customer/chats/presentation/screens/chats_screen.dart';
+import '../../../features/customer/profile/presentation/screens/customer_profile_screen.dart';
+import '../../../features/customer/products/presentation/screens/product_detail_screen.dart';
 import 'main_shell.dart';
+import 'customer_shell.dart';
 
-final appRouter = GoRouter(
+final routerProvider = Provider<GoRouter>((ref) => GoRouter(
   initialLocation: '/splash',
   debugLogDiagnostics: false,
   routes: [
+    // ─── Auth routes ───────────────────────────────────────────────────────────
     GoRoute(
       path: '/splash',
       builder: (_, _) => const SplashScreen(),
@@ -27,6 +36,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/login',
       builder: (_, _) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (_, _) => const RegisterScreen(),
     ),
     GoRoute(
       path: '/otp',
@@ -38,6 +51,16 @@ final appRouter = GoRouter(
       path: '/forgot-password',
       builder: (_, _) => const ForgotPasswordScreen(),
     ),
+
+    // ─── Product detail (shared, outside shells) ───────────────────────────────
+    GoRoute(
+      path: '/product/:id',
+      builder: (_, state) => ProductDetailScreen(
+        productId: state.pathParameters['id'] ?? '',
+      ),
+    ),
+
+    // ─── Agent Shell (5 tabs) ──────────────────────────────────────────────────
     StatefulShellRoute.indexedStack(
       builder: (_, __, shell) => MainShell(shell: shell),
       branches: [
@@ -118,5 +141,44 @@ final appRouter = GoRouter(
         ),
       ],
     ),
+
+    // ─── Customer Shell (4 tabs) ───────────────────────────────────────────────
+    StatefulShellRoute.indexedStack(
+      builder: (_, __, shell) => CustomerShell(shell: shell),
+      branches: [
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/customer/home',
+              builder: (_, _) => const CustomerHomeScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/customer/orders',
+              builder: (_, _) => const OrdersScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/customer/chats',
+              builder: (_, _) => const ChatsScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/customer/profile',
+              builder: (_, _) => const CustomerProfileScreen(),
+            ),
+          ],
+        ),
+      ],
+    ),
   ],
-);
+));

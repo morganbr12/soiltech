@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
@@ -16,12 +17,13 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   @override
   void initState() {
     super.initState();
+    final splashDuration = kDebugMode ? const Duration(milliseconds: 400) : const Duration(seconds: 3);
     _progressController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: splashDuration,
     )..forward();
 
-    Future.delayed(const Duration(milliseconds: 3200), () {
+    Future.delayed(kDebugMode ? const Duration(milliseconds: 450) : const Duration(milliseconds: 3200), () {
       if (mounted) context.go('/login');
     });
   }
