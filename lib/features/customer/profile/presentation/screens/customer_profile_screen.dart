@@ -206,7 +206,7 @@ class CustomerProfileScreen extends ConsumerWidget {
                   _MenuTile(
                     icon: Icons.notifications_outlined,
                     label: 'Notifications',
-                    onTap: () {},
+                    onTap: () => context.push('/profile/notifications'),
                   ),
                   _MenuTile(
                     icon: Icons.dark_mode_outlined,

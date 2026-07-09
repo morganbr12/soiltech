@@ -20,6 +20,11 @@ abstract class PaymentsApi {
   @GET('/payments/{id}')
   Future<ApiResponse<PaymentRecord>> getPayment(@Path('id') String id);
 
+  @POST(ApiConstants.payments)
+  Future<ApiResponse<PaymentRecord>> createPayment(
+    @Body() Map<String, dynamic> body,
+  );
+
   @PATCH('/payments/{id}/mark-paid')
   Future<ApiResponse<PaymentRecord>> markAsPaid(
     @Path('id') String id,

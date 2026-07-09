@@ -30,6 +30,25 @@ class PaymentsRepository {
     return response.data!;
   }
 
+  Future<PaymentRecord> createPayment({
+    required String farmerId,
+    required String produceRecordId,
+    required double amount,
+    required String paymentMethod,
+    String? reference,
+    String? notes,
+  }) async {
+    final response = await _api.createPayment({
+      'farmerId': farmerId,
+      'produceRecordId': produceRecordId,
+      'amount': amount,
+      'paymentMethod': paymentMethod,
+      if (reference != null && reference.isNotEmpty) 'reference': reference,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+    return response.data!;
+  }
+
   Future<PaymentRecord> markAsPaid(String id, String transactionRef, String method) async {
     final response = await _api.markAsPaid(id, {
       'transaction_ref': transactionRef,

@@ -13,7 +13,7 @@ part 'farmers_api.g.dart';
 abstract class FarmersApi {
   factory FarmersApi(Dio dio, {String? baseUrl}) = _FarmersApi;
 
-  @GET('/farmers/{id}')
+  @GET('/agent/farmers/{id}')
   Future<ApiResponse<AgentFarmer>> getFarmer(@Path('id') String id);
 
   @POST('/agent/farmers')

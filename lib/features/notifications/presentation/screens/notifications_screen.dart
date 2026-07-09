@@ -1,47 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/core/theme/app_colors.dart';
-import '../../../../shared/extensions/extensions.dart';
-import '../../../../shared/models/app_models.dart';
-import '../../../../shared/models/dummy_data.dart';
-import '../../../../shared/widgets/offline_banner.dart';
+import '../../../../features/dashboard/presentation/providers/dashboard_provider.dart';
+import '../../data/notifications_repository.dart';
 
-class NotificationsScreen extends StatefulWidget {
+class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
 
   @override
-  State<NotificationsScreen> createState() => _NotificationsScreenState();
+  ConsumerState<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> {
-  late List<AppNotification> _notifications;
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
+  bool _markingAll = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _notifications = List.from(DummyData.notifications);
+  Future<void> _markAsRead(ApiNotification n) async {
+    if (n.isRead) return;
+    await ref.read(notificationsRepositoryProvider).markAsRead(n.id);
+    ref.invalidate(notificationsListProvider);
+    ref.invalidate(unreadNotificationCountProvider);
   }
 
-  void _markAllRead() {
-    setState(() {
-      _notifications = _notifications.map((n) => AppNotification(
-        id: n.id,
-        title: n.title,
-        body: n.body,
-        type: n.type,
-        timestamp: n.timestamp,
-        isRead: true,
-        data: n.data,
-      )).toList();
-    });
+  Future<void> _markAllRead() async {
+    setState(() => _markingAll = true);
+    await ref.read(notificationsRepositoryProvider).markAllRead();
+    ref.invalidate(notificationsListProvider);
+    ref.invalidate(unreadNotificationCountProvider);
+    if (mounted) setState(() => _markingAll = false);
   }
-
-  int get _unreadCount => _notifications.where((n) => !n.isRead).length;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final notifAsync = ref.watch(notificationsListProvider);
+    final unreadCount = notifAsync.valueOrNull?.where((n) => !n.isRead).length ?? 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -53,111 +46,129 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Notifications'),
-            if (_unreadCount > 0)
+            if (unreadCount > 0)
               Text(
-                '$_unreadCount unread',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.primary,
-                ),
+                '$unreadCount unread',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.primary),
               ),
           ],
         ),
         centerTitle: false,
         actions: [
-          if (_unreadCount > 0)
+          if (unreadCount > 0)
             TextButton(
-              onPressed: _markAllRead,
-              child: const Text('Mark all read'),
+              onPressed: _markingAll ? null : _markAllRead,
+              child: _markingAll
+                  ? const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                  : const Text('Mark all read'),
             ),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 20),
+            onPressed: () {
+              ref.invalidate(notificationsListProvider);
+              ref.invalidate(unreadNotificationCountProvider);
+            },
+          ),
           const SizedBox(width: 4),
         ],
       ),
-      body: _notifications.isEmpty
-          ? AppEmptyState(
-              icon: Icons.notifications_none_rounded,
-              title: 'No Notifications',
-              subtitle: 'You\'re all caught up!',
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-              itemCount: _notifications.length,
-              itemBuilder: (_, i) {
-                final n = _notifications[i];
+      body: notifAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)),
+        error: (e, _) => Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.notifications_off_outlined, size: 52, color: AppColors.primaryLight),
+            const SizedBox(height: 12),
+            const Text('Could not load notifications', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => ref.invalidate(notificationsListProvider),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry'),
+            ),
+          ]),
+        ),
+        data: (notifications) {
+          if (notifications.isEmpty) {
+            return Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.notifications_none_rounded, size: 72,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3)),
+                const SizedBox(height: 16),
+                const Text('No Notifications', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                Text("You're all caught up!",
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ]).animate().fadeIn(duration: 400.ms),
+            );
+          }
 
-                // Date separator
-                bool showDateHeader = false;
-                if (i == 0) {
-                  showDateHeader = true;
-                } else {
-                  final prev = _notifications[i - 1];
-                  showDateHeader = n.timestamp.day != prev.timestamp.day;
-                }
+          return RefreshIndicator(
+            color: AppColors.primary,
+            onRefresh: () async {
+              ref.invalidate(notificationsListProvider);
+              ref.invalidate(unreadNotificationCountProvider);
+            },
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              itemCount: notifications.length,
+              itemBuilder: (_, i) {
+                final n = notifications[i];
+                bool showHeader = i == 0 || notifications[i - 1].createdAt.day != n.createdAt.day;
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (showDateHeader)
+                    if (showHeader)
                       Padding(
                         padding: const EdgeInsets.only(top: 8, bottom: 8),
                         child: Text(
-                          _dateLabel(n.timestamp),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            letterSpacing: 0.5,
-                          ),
+                          _dateLabel(n.createdAt),
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                letterSpacing: 0.5,
+                              ),
                         ),
                       ),
                     _NotificationCard(
                       notification: n,
                       index: i,
-                      onTap: () {
-                        setState(() {
-                          _notifications[i] = AppNotification(
-                            id: n.id,
-                            title: n.title,
-                            body: n.body,
-                            type: n.type,
-                            timestamp: n.timestamp,
-                            isRead: true,
-                            data: n.data,
-                          );
-                        });
-                      },
+                      onTap: () => _markAsRead(n),
                     ),
                   ],
                 );
               },
             ),
+          );
+        },
+      ),
     );
   }
 
   String _dateLabel(DateTime dt) {
     final now = DateTime.now();
-    final diff = now.difference(dt).inDays;
+    final diff = DateTime(now.year, now.month, now.day)
+        .difference(DateTime(dt.year, dt.month, dt.day))
+        .inDays;
     if (diff == 0) return 'TODAY';
     if (diff == 1) return 'YESTERDAY';
-    return dt.shortDate.toUpperCase();
+    return '${dt.day}/${dt.month}/${dt.year}'.toUpperCase();
   }
 }
 
 class _NotificationCard extends StatelessWidget {
-  final AppNotification notification;
+  final ApiNotification notification;
   final int index;
   final VoidCallback onTap;
 
-  const _NotificationCard({
-    required this.notification,
-    required this.index,
-    required this.onTap,
-  });
+  const _NotificationCard({required this.notification, required this.index, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final color = notification.type.color;
+    final color = notification.color;
     final isUnread = !notification.isRead;
 
     return GestureDetector(
@@ -168,9 +179,7 @@ class _NotificationCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isUnread
-              ? (isDark
-                  ? color.withValues(alpha: 0.08)
-                  : color.withValues(alpha: 0.05))
+              ? (isDark ? color.withValues(alpha: 0.08) : color.withValues(alpha: 0.05))
               : (isDark ? AppColors.cardDark : AppColors.cardLight),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -184,13 +193,9 @@ class _NotificationCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(notification.type.icon, size: 20, color: color),
+              width: 40, height: 40,
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+              child: Icon(notification.icon, size: 20, color: color),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -202,63 +207,39 @@ class _NotificationCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           notification.title,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 13, fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (isUnread)
                         Container(
-                          width: 8,
-                          height: 8,
+                          width: 8, height: 8,
                           margin: const EdgeInsets.only(left: 6),
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                          ),
+                          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                         ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
                     notification.body,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurfaceVariant,
-                      height: 1.4,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant, height: 1.4),
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
+                        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
                         child: Text(
-                          notification.type.name.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: color,
-                            letterSpacing: 0.5,
-                          ),
+                          notification.typeLabel.toUpperCase(),
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color, letterSpacing: 0.5),
                         ),
                       ),
                       const Spacer(),
                       Text(
-                        notification.timestamp.timeAgo,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                        _timeAgo(notification.createdAt),
+                        style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -272,5 +253,14 @@ class _NotificationCard extends StatelessWidget {
         .animate(delay: Duration(milliseconds: 50 * index))
         .fadeIn(duration: 300.ms)
         .slideX(begin: 0.03, end: 0);
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 60) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${dt.day}/${dt.month}/${dt.year}';
   }
 }

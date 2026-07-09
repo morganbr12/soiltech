@@ -4,17 +4,19 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../../app/core/theme/app_colors.dart';
-import '../../../../../shared/models/app_models.dart';
-import '../../../../../shared/models/dummy_data.dart';
+import '../../../../../shared/models/product.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/rating_widget.dart';
 import '../../../../../shared/widgets/section_header.dart';
 import '../../../../../shared/widgets/product_card.dart';
+import '../../../../../shared/widgets/shimmer_loader.dart';
+import '../../../home/presentation/providers/home_providers.dart';
 import '../../../orders/presentation/providers/orders_provider.dart';
+import '../../../chats/data/chats_repository.dart';
+import '../../../chats/presentation/screens/conversation_screen.dart';
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
   final String productId;
-
   const ProductDetailScreen({super.key, required this.productId});
 
   @override
@@ -22,40 +24,35 @@ class ProductDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
-  late Product? _product;
   int _galleryIndex = 0;
   double _quantity = 1.0;
   bool _isFavourited = false;
-  bool _addingToCart = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _product = DummyData.products.where((p) => p.id == widget.productId).firstOrNull;
-  }
+  String _orderPaymentType = 'CASH';
 
   @override
   Widget build(BuildContext context) {
+    final productAsync = ref.watch(productDetailProvider(widget.productId));
+
+    return productAsync.when(
+      loading: () => const _LoadingScaffold(),
+      error: (e, _) => _ErrorScaffold(
+        onRetry: () => ref.invalidate(productDetailProvider(widget.productId)),
+      ),
+      data: (p) => _buildBody(context, p),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, Product p) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
-    if (_product == null) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: const Center(child: Text('Product not found')),
-      );
-    }
-
-    final p = _product!;
     final allImages = [p.imageUrl, ...p.galleryImages];
     final total = p.pricePerUnit * _quantity;
-    final related = DummyData.products.where((r) => r.category == p.category && r.id != p.id).take(4).toList();
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
       body: CustomScrollView(
         slivers: [
-          // ─── Image Gallery App Bar ────────────────────────────────────────────
+          // ── Image gallery app bar ─────────────────────────────────────────
           SliverAppBar(
             expandedHeight: 320,
             pinned: true,
@@ -64,10 +61,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               onTap: () => context.pop(),
               child: Container(
                 margin: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), shape: BoxShape.circle),
                 child: const Icon(Icons.arrow_back_rounded, color: Colors.black87),
               ),
             ),
@@ -78,10 +72,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   margin: const EdgeInsets.all(8),
                   width: 38,
                   height: 38,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), shape: BoxShape.circle),
                   child: Icon(
                     _isFavourited ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                     color: _isFavourited ? const Color(0xFFE63946) : Colors.grey,
@@ -93,10 +84,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 margin: const EdgeInsets.fromLTRB(0, 8, 12, 8),
                 width: 38,
                 height: 38,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), shape: BoxShape.circle),
                 child: const Icon(Icons.share_outlined, color: Colors.black87, size: 20),
               ),
             ],
@@ -109,16 +97,15 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     itemBuilder: (_, i) => CachedNetworkImage(
                       imageUrl: allImages[i],
                       fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(color: AppColors.primaryContainer),
-                      errorWidget: (_, __, ___) => Container(
+                      placeholder: (_, _) => Container(color: AppColors.primaryContainer),
+                      errorWidget: (_, _, _) => Container(
                         color: AppColors.primaryContainer,
-                        child: Center(
-                          child: Text(p.category.emoji, style: const TextStyle(fontSize: 80)),
+                        child: const Center(
+                          child: Icon(Icons.agriculture_rounded, size: 80, color: AppColors.primaryLight),
                         ),
                       ),
                     ),
                   ),
-                  // Page indicator
                   Positioned(
                     bottom: 16,
                     right: 16,
@@ -134,17 +121,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       ),
                     ),
                   ),
-                  // Deal badge
                   if (p.isOnDeal)
                     Positioned(
                       top: 60,
                       left: 16,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE63946),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        decoration: BoxDecoration(color: const Color(0xFFE63946), borderRadius: BorderRadius.circular(12)),
                         child: Text(
                           '${p.discountPercent.toStringAsFixed(0)}% OFF TODAY',
                           style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
@@ -157,394 +140,342 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           ),
 
           SliverToBoxAdapter(
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ─── Main Info Card ─────────────────────────────────────────
-                  Container(
-                    margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.cardDark : Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primaryContainer,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      '${p.category.emoji} ${p.category.label}',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    p.name,
-                                    style: const TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: -0.5,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Main info card ──────────────────────────────────────────
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.cardDark : Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (p.originalPrice != null)
-                                  Text(
-                                    'GHS ${p.originalPrice!.toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey,
-                                      decoration: TextDecoration.lineThrough,
-                                    ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryContainer,
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                Text(
-                                  'GHS ${p.pricePerUnit.toStringAsFixed(0)}',
-                                  style: const TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.primary,
-                                    letterSpacing: -0.5,
+                                  child: Text(
+                                    p.freshnessLabel.isNotEmpty ? p.freshnessLabel : p.name,
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary),
                                   ),
                                 ),
+                                const SizedBox(height: 8),
                                 Text(
-                                  'per ${p.unit}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
+                                  p.name,
+                                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5, height: 1.2),
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 14),
-
-                        RatingWidget(rating: p.rating, reviewCount: p.reviewCount),
-
-                        const SizedBox(height: 16),
-
-                        // Stats row
-                        Row(
-                          children: [
-                            _InfoPill(
-                              icon: Icons.inventory_2_outlined,
-                              label: '${p.availableQuantity.toStringAsFixed(0)} ${p.unit} left',
-                              color: AppColors.info,
-                            ),
-                            const SizedBox(width: 8),
-                            _InfoPill(
-                              icon: Icons.location_on_outlined,
-                              label: '${p.distanceKm.toStringAsFixed(1)} km away',
-                              color: AppColors.tertiary,
-                            ),
-                            const SizedBox(width: 8),
-                            _InfoPill(
-                              icon: Icons.eco_outlined,
-                              label: p.freshnessLabel,
-                              color: AppColors.success,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
-
-                  // ─── Freshness & Harvest ───────────────────────────────────
-                  Container(
-                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.successLight,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.eco_rounded, color: AppColors.success, size: 22),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              const Text(
-                                'Freshness Guarantee',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  color: AppColors.success,
+                              if (p.originalPrice != null)
+                                Text(
+                                  'GHS ${p.originalPrice!.toStringAsFixed(0)}',
+                                  style: const TextStyle(fontSize: 13, color: Colors.grey, decoration: TextDecoration.lineThrough),
                                 ),
+                              Text(
+                                'GHS ${p.pricePerUnit.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.primary, letterSpacing: -0.5),
                               ),
                               Text(
-                                'Harvested on ${_formatDate(p.harvestDate)}. Direct from farm to you.',
-                                style: const TextStyle(fontSize: 12, color: AppColors.success),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ).animate(delay: 50.ms).fadeIn(),
-
-                  // ─── Seller Info ───────────────────────────────────────────
-                  Container(
-                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.cardDark : Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor: AppColors.primaryContainer,
-                          child: Text(
-                            p.farmerName[0],
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                p.farmerName,
-                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${p.lbcName} · ${p.location}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        OutlinedButton(
-                          onPressed: () {},
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.primary),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            minimumSize: Size.zero,
-                          ),
-                          child: const Text('Chat', style: TextStyle(fontSize: 12, color: AppColors.primary)),
-                        ),
-                      ],
-                    ),
-                  ).animate(delay: 100.ms).fadeIn(),
-
-                  // ─── Description ───────────────────────────────────────────
-                  Container(
-                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.cardDark : Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('About this Product', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                        const SizedBox(height: 8),
-                        Text(
-                          p.description,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: theme.colorScheme.onSurfaceVariant,
-                            height: 1.6,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ).animate(delay: 150.ms).fadeIn(),
-
-                  // ─── Quantity Selector ─────────────────────────────────────
-                  Container(
-                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.cardDark : Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Quantity (${_quantity.toStringAsFixed(1)} ${p.unit})', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                              Text(
-                                '${_quantity.toStringAsFixed(1)} ${p.unit} × GHS ${p.pricePerUnit} = GHS ${total.toStringAsFixed(2)}',
+                                'per ${p.unit}',
                                 style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                               ),
                             ],
                           ),
-                        ),
-                        Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: theme.colorScheme.outlineVariant),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                onPressed: _quantity > 0.5 ? () => setState(() => _quantity -= 0.5) : null,
-                                icon: const Icon(Icons.remove_rounded, size: 18),
-                                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                              ),
-                              SizedBox(
-                                width: 40,
-                                child: Text(
-                                  _quantity.toStringAsFixed(1),
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: () => setState(() => _quantity += 0.5),
-                                icon: const Icon(Icons.add_rounded, size: 18, color: AppColors.primary),
-                                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ).animate(delay: 200.ms).fadeIn(),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      RatingWidget(rating: p.averageRating, reviewCount: p.reviewCount),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          _InfoPill(icon: Icons.inventory_2_outlined, label: '${p.stockQuantity} ${p.unit} left', color: AppColors.info),
+                          const SizedBox(width: 8),
+                          _InfoPill(icon: Icons.location_on_outlined, label: p.location.split(',').first.trim(), color: AppColors.tertiary),
+                          const SizedBox(width: 8),
+                          _InfoPill(icon: Icons.eco_outlined, label: p.freshnessLabel, color: AppColors.success),
+                        ],
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
 
-                  // ─── Reviews ───────────────────────────────────────────────
-                  Container(
-                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.cardDark : Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SectionHeader(
-                          title: 'Reviews',
-                          actionLabel: 'All ${p.reviewCount}',
-                          onAction: () {},
+                // ── Freshness ───────────────────────────────────────────────
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.successLight,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.15), shape: BoxShape.circle),
+                        child: const Icon(Icons.eco_rounded, color: AppColors.success, size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Freshness Guarantee', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.success)),
+                            Text(
+                              '${p.freshnessLabel}. Direct from farm to you.',
+                              style: const TextStyle(fontSize: 12, color: AppColors.success),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 14),
-                        RatingBar(rating: p.rating, reviewCount: p.reviewCount),
-                        const Divider(height: 24),
-                        ...DummyData.sampleReviews.map((rev) => Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
-                          child: _ReviewTile(review: rev),
-                        )),
-                      ],
-                    ),
-                  ).animate(delay: 250.ms).fadeIn(),
+                      ),
+                    ],
+                  ),
+                ).animate(delay: 50.ms).fadeIn(),
 
-                  // ─── Related Products ──────────────────────────────────────
-                  if (related.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-                      child: SectionHeader(
-                        title: 'Related Products',
-                        actionLabel: 'See all',
+                // ── Seller info ─────────────────────────────────────────────
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.cardDark : Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: AppColors.primaryContainer,
+                        child: Text(p.farmerName.isNotEmpty ? p.farmerName[0] : '?',
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(p.farmerName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                            const SizedBox(height: 2),
+                            Text(
+                              p.location,
+                              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      OutlinedButton(
+                        onPressed: () {},
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.primary),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          minimumSize: Size.zero,
+                        ),
+                        child: const Text('Chat', style: TextStyle(fontSize: 12, color: AppColors.primary)),
+                      ),
+                    ],
+                  ),
+                ).animate(delay: 100.ms).fadeIn(),
+
+                // ── Description ─────────────────────────────────────────────
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.cardDark : Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('About this Product', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                      const SizedBox(height: 8),
+                      Text(p.description, style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant, height: 1.6)),
+                    ],
+                  ),
+                ).animate(delay: 150.ms).fadeIn(),
+
+                // ── Quantity selector ───────────────────────────────────────
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.cardDark : Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Quantity (${_quantity.toStringAsFixed(1)} ${p.unit})', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                            Text(
+                              '${_quantity.toStringAsFixed(1)} ${p.unit} × GHS ${p.pricePerUnit} = GHS ${total.toStringAsFixed(2)}',
+                              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: theme.colorScheme.outlineVariant),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: _quantity > 0.5 ? () => setState(() => _quantity -= 0.5) : null,
+                              icon: const Icon(Icons.remove_rounded, size: 18),
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            ),
+                            SizedBox(
+                              width: 40,
+                              child: Text(_quantity.toStringAsFixed(1), textAlign: TextAlign.center,
+                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                            ),
+                            IconButton(
+                              onPressed: () => setState(() => _quantity += 0.5),
+                              icon: const Icon(Icons.add_rounded, size: 18, color: AppColors.primary),
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate(delay: 200.ms).fadeIn(),
+
+                // ── Reviews ─────────────────────────────────────────────────
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.cardDark : Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SectionHeader(
+                        title: 'Reviews',
+                        actionLabel: 'All ${p.reviewCount}',
                         onAction: () {},
                       ),
-                    ),
-                    SizedBox(
-                      height: 280,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: related.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 14),
-                        itemBuilder: (_, i) => ProductCard(
-                          product: related[i],
-                          onTap: () => context.pushReplacement('/product/${related[i].id}'),
+                      const SizedBox(height: 14),
+                      RatingBar(rating: p.averageRating, reviewCount: p.reviewCount),
+                      const Divider(height: 24),
+                      ref.watch(productReviewsProvider(widget.productId)).when(
+                        loading: () => Column(
+                          children: List.generate(2, (_) =>
+                            const Padding(padding: EdgeInsets.only(bottom: 14), child: ShimmerBox(width: double.infinity, height: 60, radius: 12)),
+                          ),
+                        ),
+                        error: (_, _) => const SizedBox.shrink(),
+                        data: (reviews) => reviews.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: Text('No reviews yet.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 13)),
+                              )
+                            : Column(
+                                children: reviews.take(5).map((rev) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 14),
+                                  child: _ReviewTile(review: rev),
+                                )).toList(),
+                              ),
+                      ),
+                    ],
+                  ),
+                ).animate(delay: 250.ms).fadeIn(),
+
+                // ── Related products ────────────────────────────────────────
+                ref.watch(popularProductsProvider(null)).whenData((all) {
+                  final related = all.where((r) => r.id != p.id).take(4).toList();
+                  if (related.isEmpty) return const SizedBox.shrink();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+                        child: SectionHeader(title: 'You May Also Like', actionLabel: 'See all', onAction: () {}),
+                      ),
+                      SizedBox(
+                        height: 280,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: related.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 14),
+                          itemBuilder: (_, i) => ProductCard(
+                            product: related[i],
+                            onTap: () => context.pushReplacement('/product/${related[i].id}'),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  );
+                }).valueOrNull ?? const SizedBox.shrink(),
 
-                  const SizedBox(height: 120),
-                ],
-              ),
+                const SizedBox(height: 120),
+              ],
             ),
           ),
         ],
       ),
 
-      // ─── Bottom Action Bar ──────────────────────────────────────────────────
+      // ── Bottom action bar ───────────────────────────────────────────────
       bottomNavigationBar: Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
         decoration: BoxDecoration(
           color: isDark ? AppColors.cardDark : Colors.white,
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
-            ),
+            BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08), blurRadius: 20, offset: const Offset(0, -4)),
           ],
         ),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: AppButton(
-                label: 'Add to Cart',
-                variant: AppButtonVariant.outline,
-                onPressed: _addingToCart ? null : () => _showAddToCartSnackBar(context, p),
-                icon: Icons.shopping_cart_outlined,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: AppButton(
-                label: 'Buy Now  GHS ${total.toStringAsFixed(0)}',
-                onPressed: () => _showPlaceOrderSheet(context, p),
-                icon: Icons.bolt_rounded,
-              ),
+            if (p.produceListingId != null) ...[
+              _ChatWithLbcButton(product: p),
+              const SizedBox(height: 10),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton(
+                    label: 'Add to Cart',
+                    variant: AppButtonVariant.outline,
+                    onPressed: () => _showAddToCartSnackBar(context, p),
+                    icon: Icons.shopping_cart_outlined,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppButton(
+                    label: 'Buy Now  GHS ${total.toStringAsFixed(0)}',
+                    onPressed: () => _showPlaceOrderSheet(context, p),
+                    icon: Icons.bolt_rounded,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -573,6 +504,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             builder: (ctx, setModalState) {
               final orderState = ref.watch(placeOrderProvider);
               final isLoading = orderState is AsyncLoading;
+              final isDark = Theme.of(context).brightness == Brightness.dark;
 
               return Form(
                 key: formKey,
@@ -613,6 +545,43 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
                     ),
+                    const SizedBox(height: 14),
+                    // Payment method
+                    const Text('Payment method', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        for (final t in [('CASH', Icons.payments_outlined), ('MOMO', Icons.phone_android_rounded)])
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() => _orderPaymentType = t.$1);
+                                setModalState(() {});
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                margin: EdgeInsets.only(right: t.$1 == 'CASH' ? 8 : 0),
+                                padding: const EdgeInsets.symmetric(vertical: 11),
+                                decoration: BoxDecoration(
+                                  color: _orderPaymentType == t.$1
+                                      ? AppColors.primaryContainer.withValues(alpha: 0.7)
+                                      : (isDark ? const Color(0xFF1E2E20) : const Color(0xFFF0F6F1)),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: _orderPaymentType == t.$1 ? AppColors.primary : Colors.transparent,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Column(children: [
+                                  Icon(t.$2, size: 20, color: _orderPaymentType == t.$1 ? AppColors.primary : Theme.of(context).colorScheme.onSurfaceVariant),
+                                  const SizedBox(height: 3),
+                                  Text(t.$1, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _orderPaymentType == t.$1 ? AppColors.primary : Theme.of(context).colorScheme.onSurfaceVariant)),
+                                ]),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
@@ -623,9 +592,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 if (!formKey.currentState!.validate()) return;
                                 final success = await ref.read(placeOrderProvider.notifier).placeOrder(
                                   deliveryAddress: addressCtrl.text.trim(),
-                                  productId: p.id,
-                                  quantity: _quantity.round(),
+                                  items: [{'productId': p.id, 'quantity': _quantity.round()}],
                                   notes: notesCtrl.text.trim(),
+                                  paymentType: _orderPaymentType,
                                 );
                                 if (!context.mounted) return;
                                 Navigator.of(ctx).pop();
@@ -683,13 +652,73 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
-  String _formatDate(DateTime d) => '${d.day} ${_monthName(d.month)} ${d.year}';
+}
 
-  String _monthName(int m) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return months[m - 1];
+// ─── Loading skeleton ─────────────────────────────────────────────────────────
+
+class _LoadingScaffold extends StatelessWidget {
+  const _LoadingScaffold();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 320,
+            pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(color: AppColors.primaryContainer),
+            ),
+            leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: null),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: List.generate(4, (i) => Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: ShimmerBox(width: double.infinity, height: i == 0 ? 140 : 80, radius: 18),
+                )),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
+
+// ─── Error scaffold ───────────────────────────────────────────────────────────
+
+class _ErrorScaffold extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _ErrorScaffold({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => context.pop())),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.inventory_2_outlined, size: 56, color: AppColors.primaryLight),
+              const SizedBox(height: 16),
+              const Text('Could not load product', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 24),
+              AppButton(label: 'Retry', icon: Icons.refresh_rounded, onPressed: onRetry),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Info pill ────────────────────────────────────────────────────────────────
 
 class _InfoPill extends StatelessWidget {
   final IconData icon;
@@ -702,10 +731,7 @@ class _InfoPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -717,6 +743,8 @@ class _InfoPill extends StatelessWidget {
     );
   }
 }
+
+// ─── Review tile ──────────────────────────────────────────────────────────────
 
 class _ReviewTile extends StatelessWidget {
   final ProductReview review;
@@ -730,12 +758,11 @@ class _ReviewTile extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 18,
-          backgroundImage: review.reviewerAvatar != null
-              ? CachedNetworkImageProvider(review.reviewerAvatar!)
-              : null,
+          backgroundImage: review.reviewerAvatar != null ? CachedNetworkImageProvider(review.reviewerAvatar!) : null,
           backgroundColor: AppColors.primaryContainer,
           child: review.reviewerAvatar == null
-              ? Text(review.reviewerName[0], style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700))
+              ? Text(review.reviewerName.isNotEmpty ? review.reviewerName[0] : '?',
+                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700))
               : null,
         ),
         const SizedBox(width: 12),
@@ -751,14 +778,71 @@ class _ReviewTile extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              Text(
-                review.comment,
-                style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant, height: 1.4),
-              ),
+              Text(review.comment, style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant, height: 1.4)),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── Chat with LBC button ─────────────────────────────────────────────────────
+
+class _ChatWithLbcButton extends ConsumerStatefulWidget {
+  final Product product;
+  const _ChatWithLbcButton({required this.product});
+
+  @override
+  ConsumerState<_ChatWithLbcButton> createState() => _ChatWithLbcButtonState();
+}
+
+class _ChatWithLbcButtonState extends ConsumerState<_ChatWithLbcButton> {
+  bool _loading = false;
+
+  Future<void> _openChat() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      final repo = ref.read(chatsRepositoryProvider);
+      final thread = await repo.startChat(
+        produceListingId: widget.product.produceListingId!,
+        message: 'Hi, I am interested in ${widget.product.name}.',
+      );
+      ref.invalidate(chatListProvider);
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ConversationScreen(thread: thread)),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open chat: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _openChat,
+        icon: _loading
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+        label: Text(_loading ? 'Opening chat…' : 'Chat with LBC'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          side: const BorderSide(color: AppColors.primary, width: 1.5),
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        ),
+      ),
     );
   }
 }

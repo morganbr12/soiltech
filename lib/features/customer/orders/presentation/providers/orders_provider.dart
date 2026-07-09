@@ -19,17 +19,16 @@ class PlaceOrderNotifier extends StateNotifier<AsyncValue<CustomerOrder?>> {
 
   Future<bool> placeOrder({
     required String deliveryAddress,
-    required String productId,
-    required int quantity,
+    required List<Map<String, dynamic>> items,
     String? notes,
+    String paymentType = 'CASH',
   }) async {
     state = const AsyncValue.loading();
     try {
       final order = await _repo.placeOrder({
         'deliveryAddress': deliveryAddress,
-        'items': [
-          {'productId': productId, 'quantity': quantity},
-        ],
+        'items': items,
+        'paymentType': paymentType,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       });
       state = AsyncValue.data(order);
@@ -45,6 +44,6 @@ class PlaceOrderNotifier extends StateNotifier<AsyncValue<CustomerOrder?>> {
 }
 
 final placeOrderProvider =
-    StateNotifierProvider.autoDispose<PlaceOrderNotifier, AsyncValue<CustomerOrder?>>(
+    StateNotifierProvider<PlaceOrderNotifier, AsyncValue<CustomerOrder?>>(
   (ref) => PlaceOrderNotifier(ref.read(ordersRepositoryProvider), ref),
 );

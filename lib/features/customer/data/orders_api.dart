@@ -20,7 +20,7 @@ abstract class OrdersApi {
   @GET('/orders/{id}')
   Future<ApiResponse<CustomerOrder>> getOrder(@Path('id') String id);
 
-  @POST(ApiConstants.orders)
+  @POST(ApiConstants.placeOrder)
   Future<ApiResponse<CustomerOrder>> placeOrder(
     @Body() Map<String, dynamic> body,
   );

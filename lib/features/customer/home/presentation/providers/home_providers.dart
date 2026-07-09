@@ -39,3 +39,13 @@ final popularProductsProvider =
       .read(productsRepositoryProvider)
       .getProducts(categoryId: categoryId);
 });
+
+final productDetailProvider =
+    FutureProvider.family<Product, String>((ref, productId) {
+  return ref.read(productsRepositoryProvider).getProductById(productId);
+});
+
+final productReviewsProvider =
+    FutureProvider.family<List<ProductReview>, String>((ref, productId) {
+  return ref.read(productsRepositoryProvider).getProductReviews(productId);
+});

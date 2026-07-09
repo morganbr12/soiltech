@@ -54,6 +54,6 @@ class FarmsRepository {
     });
 
     appLogger.d('Registering farm: $fields, photos: ${photos.length}');
-    await _dio.post('/agent/farms', data: formData);
+    await _dio.post('/farmers/$farmerId/farms', data: formData);
   }
 }

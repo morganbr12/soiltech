@@ -29,7 +29,7 @@ class _FarmersApi implements FarmersApi {
       Options(method: 'GET', headers: _headers, extra: _extra)
           .compose(
             _dio.options,
-            '/farmers/${id}',
+            '/agent/farmers/${id}',
             queryParameters: queryParameters,
             data: _data,
           )

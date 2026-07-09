@@ -107,7 +107,7 @@ class _OrdersApi implements OrdersApi {
       Options(method: 'POST', headers: _headers, extra: _extra)
           .compose(
             _dio.options,
-            '/orders',
+            '/customers/orders',
             queryParameters: queryParameters,
             data: _data,
           )

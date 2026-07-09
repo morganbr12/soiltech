@@ -1,5 +1,4 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
-import 'enums.dart';
 
 part 'product.freezed.dart';
 part 'product.g.dart';
@@ -11,26 +10,25 @@ abstract class Product with _$Product {
   const factory Product({
     required String id,
     required String name,
-    required String description,
+    @Default('') String description,
     required String imageUrl,
     @Default([]) List<String> galleryImages,
     required double pricePerUnit,
     required String unit,
-    required double availableQuantity,
-    required String farmerId,
+    required int stockQuantity,
+    required String categoryId,
+    String? produceListingId,
     required String farmerName,
-    required String lbcName,
-    required String location,
-    required double distanceKm,
-    required double rating,
-    required int reviewCount,
-    required ProductCategory category,
-    required DateTime harvestDate,
-    required String freshnessLabel,
+    @Default('') String location,
+    @Default('') String freshnessLabel,
+    @Default(0.0) double averageRating,
+    @Default(0) int reviewCount,
     @Default(false) bool isFeatured,
     @Default(false) bool isOnDeal,
-    double? originalPrice,
     @Default(true) bool isAvailable,
+    double? originalPrice,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) = _Product;
 
   double get discountPercent {

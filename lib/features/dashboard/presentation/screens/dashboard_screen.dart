@@ -376,7 +376,6 @@ class _QuickActionsGrid extends StatelessWidget {
       _QuickAction(icon: Icons.person_add_rounded, label: 'Register\nFarmer', color: AppColors.primary, onTap: () => context.push('/farmers/register')),
       _QuickAction(icon: Icons.agriculture_rounded, label: 'Record\nCollect', color: const Color(0xFF52B788), onTap: () => context.push('/produce/create')),
       _QuickAction(icon: Icons.terrain_rounded, label: 'Register\nFarm', color: AppColors.earth, onTap: () => context.push('/farmers/farms/register?farmerId=')),
-      _QuickAction(icon: Icons.local_shipping_rounded, label: 'Request\nPickup', color: AppColors.info, onTap: () => context.go('/logistics')),
     ];
 
     return Row(

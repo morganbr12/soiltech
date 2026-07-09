@@ -10,7 +10,9 @@ import '../../../../../shared/models/product.dart';
 import '../../../../../shared/widgets/product_card.dart';
 import '../../../../../shared/widgets/section_header.dart';
 import '../../../../../shared/widgets/shimmer_loader.dart';
+import '../../../cart/cart_provider.dart';
 import '../providers/home_providers.dart';
+import '../../../../../features/dashboard/presentation/providers/dashboard_provider.dart';
 
 class CustomerHomeScreen extends ConsumerStatefulWidget {
   const CustomerHomeScreen({super.key});
@@ -31,6 +33,22 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
     super.dispose();
   }
 
+  Future<void> _refresh() async {
+    final categoryId = ref.read(selectedCategoryIdProvider);
+    ref.invalidate(customerProfileProvider);
+    ref.invalidate(productCategoriesProvider);
+    ref.invalidate(dealProductsProvider);
+    ref.invalidate(featuredProductsProvider);
+    ref.invalidate(recentProductsProvider);
+    ref.invalidate(popularProductsProvider(categoryId));
+    await Future.wait([
+      ref.read(dealProductsProvider.future).catchError((_) => <Product>[]),
+      ref.read(featuredProductsProvider.future).catchError((_) => <Product>[]),
+      ref.read(recentProductsProvider.future).catchError((_) => <Product>[]),
+      ref.read(popularProductsProvider(categoryId).future).catchError((_) => <Product>[]),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -45,7 +63,10 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
-      body: CustomScrollView(
+      body: RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: _refresh,
+        child: CustomScrollView(
         slivers: [
           // ─── App Bar ──────────────────────────────────────────────────────────
           SliverAppBar(
@@ -96,6 +117,99 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                                 ),
                               ],
                             ),
+                          ),
+                          // Notification bell
+                          Builder(builder: (context) {
+                            final unreadAsync = ref.watch(unreadNotificationCountProvider);
+                            final unread = unreadAsync.valueOrNull ?? 0;
+                            return GestureDetector(
+                              onTap: () => context.push('/profile/notifications'),
+                              child: Container(
+                                width: 42,
+                                height: 42,
+                                margin: const EdgeInsets.only(right: 10),
+                                decoration: BoxDecoration(
+                                  color: isDark ? AppColors.cardDark : Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
+                                      blurRadius: 10, offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    const Center(child: Icon(Icons.notifications_outlined, size: 22, color: AppColors.primary)),
+                                    if (unread > 0)
+                                      Positioned(
+                                        top: 5, right: 5,
+                                        child: Container(
+                                          width: 16, height: 16,
+                                          decoration: const BoxDecoration(color: Color(0xFFE63946), shape: BoxShape.circle),
+                                          child: Center(
+                                            child: Text(
+                                              unread > 9 ? '9+' : '$unread',
+                                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                          // Cart button
+                          GestureDetector(
+                            onTap: () => context.push('/customer/cart'),
+                            child: Builder(builder: (context) {
+                              final cartCount = ref.watch(cartItemCountProvider);
+                              return Container(
+                                width: 42,
+                                height: 42,
+                                margin: const EdgeInsets.only(right: 10),
+                                decoration: BoxDecoration(
+                                  color: isDark ? AppColors.cardDark : Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    const Center(
+                                      child: Icon(Icons.shopping_basket_outlined, size: 22, color: AppColors.primary),
+                                    ),
+                                    if (cartCount > 0)
+                                      Positioned(
+                                        top: 5,
+                                        right: 5,
+                                        child: Container(
+                                          width: 16,
+                                          height: 16,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFFE63946),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              cartCount > 9 ? '9+' : '$cartCount',
+                                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            }),
                           ),
                           profileAsync.when(
                             data: (profile) => Stack(
@@ -212,7 +326,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                         ),
                         ...categories.map((cat) => _CategoryChip(
                               label: cat.name,
-                              emoji: '🌿',
+                              emoji: _categoryEmoji(cat.name),
                               isSelected: selectedCategoryId == cat.id,
                               onTap: () => ref.read(selectedCategoryIdProvider.notifier).state = cat.id,
                             )),
@@ -306,77 +420,96 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
 
                 const SizedBox(height: 28),
 
-                // ─── Today's Deals ────────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: SectionHeader(
-                    title: "Today's Deals 🔥",
-                    subtitle: 'Limited time offers',
-                    actionLabel: 'See all',
-                    onAction: () {},
-                  ),
-                ).animate(delay: 250.ms).fadeIn(),
-
-                const SizedBox(height: 14),
-
+                // ─── Fresh Produce ────────────────────────────────────────────
                 ref.watch(dealProductsProvider).when(
                   data: (products) => products.isEmpty
                       ? const SizedBox.shrink()
-                      : SizedBox(
-                          height: 280,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            itemCount: products.length,
-                            separatorBuilder: (_, _) => const SizedBox(width: 14),
-                            itemBuilder: (context, i) {
-                              final p = products[i];
-                              return ProductCard(
-                                product: p,
-                                onTap: () => context.push('/product/${p.id}'),
-                                onAddToCart: () => _showAddToCartSnackBar(context, p),
-                              );
-                            },
-                          ),
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              child: SectionHeader(
+                                title: 'Fresh Produce',
+                                subtitle: 'Sourced directly from farms',
+                                actionLabel: 'See all',
+                                onAction: () {},
+                              ),
+                            ).animate(delay: 250.ms).fadeIn(),
+                            const SizedBox(height: 14),
+                            SizedBox(
+                              height: 280,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                itemCount: products.length,
+                                separatorBuilder: (_, _) => const SizedBox(width: 14),
+                                itemBuilder: (context, i) {
+                                  final p = products[i];
+                                  return ProductCard(
+                                    product: p,
+                                    onTap: () => context.push('/product/${p.id}'),
+                                    onAddToCart: () => _showAddToCartSnackBar(context, p),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                          ],
                         ),
-                  loading: () => _HorizontalShimmerList(),
+                  loading: () => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        child: ShimmerBox(width: 160, height: 20, radius: 8),
+                      ),
+                      const SizedBox(height: 14),
+                      _HorizontalShimmerList(),
+                      const SizedBox(height: 28),
+                    ],
+                  ),
                   error: (_, __) => const SizedBox.shrink(),
                 ),
 
-                const SizedBox(height: 28),
-
-                // ─── Popular Produce ─────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: SectionHeader(
-                    title: 'Popular Produce',
-                    subtitle: 'Most ordered this week',
-                    actionLabel: 'See all',
-                    onAction: () {},
-                  ),
-                ).animate(delay: 300.ms).fadeIn(),
-
-                const SizedBox(height: 14),
-
+                // ─── Popular Produce (category-filtered) ─────────────────────
                 ref.watch(popularProductsProvider(selectedCategoryId)).when(
                   data: (products) => products.isEmpty
                       ? const SizedBox.shrink()
-                      : SizedBox(
-                          height: 280,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            itemCount: products.take(10).length,
-                            separatorBuilder: (_, _) => const SizedBox(width: 14),
-                            itemBuilder: (context, i) {
-                              final p = products[i];
-                              return ProductCard(
-                                product: p,
-                                onTap: () => context.push('/product/${p.id}'),
-                                onAddToCart: () => _showAddToCartSnackBar(context, p),
-                              );
-                            },
-                          ),
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              child: SectionHeader(
+                                title: selectedCategoryId == null
+                                    ? 'All Available Produce'
+                                    : 'Filtered Results',
+                                subtitle: 'From local LBC agents',
+                                actionLabel: 'See all',
+                                onAction: () {},
+                              ),
+                            ).animate(delay: 300.ms).fadeIn(),
+                            const SizedBox(height: 14),
+                            SizedBox(
+                              height: 280,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                itemCount: products.take(10).length,
+                                separatorBuilder: (_, _) => const SizedBox(width: 14),
+                                itemBuilder: (context, i) {
+                                  final p = products[i];
+                                  return ProductCard(
+                                    product: p,
+                                    onTap: () => context.push('/product/${p.id}'),
+                                    onAddToCart: () => _showAddToCartSnackBar(context, p),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                          ],
                         ),
                   loading: () => _HorizontalShimmerList(),
                   error: (_, __) => const SizedBox.shrink(),
@@ -417,37 +550,39 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 28),
-
-                // ─── Recommended For You ──────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: SectionHeader(
-                    title: 'Recommended For You',
-                    subtitle: 'Based on your orders',
-                    actionLabel: 'See all',
-                    onAction: () {},
-                  ),
-                ).animate(delay: 400.ms).fadeIn(),
-
-                const SizedBox(height: 14),
-
-                ref.watch(featuredProductsProvider).when(
+                // ─── Recently Added ───────────────────────────────────────────
+                ref.watch(recentProductsProvider).when(
                   data: (products) => products.isEmpty
                       ? const SizedBox.shrink()
-                      : Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Column(
-                            children: products.take(5).map((p) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: ProductCard(
-                                product: p,
-                                horizontal: true,
-                                onTap: () => context.push('/product/${p.id}'),
-                                onAddToCart: () => _showAddToCartSnackBar(context, p),
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              child: SectionHeader(
+                                title: 'Recently Added',
+                                subtitle: 'New arrivals from farms',
+                                actionLabel: 'See all',
+                                onAction: () {},
                               ),
-                            )).toList(),
-                          ),
+                            ).animate(delay: 400.ms).fadeIn(),
+                            const SizedBox(height: 14),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              child: Column(
+                                children: products.take(5).map((p) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: ProductCard(
+                                    product: p,
+                                    horizontal: true,
+                                    onTap: () => context.push('/product/${p.id}'),
+                                    onAddToCart: () => _showAddToCartSnackBar(context, p),
+                                  ),
+                                )).toList(),
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                          ],
                         ),
                   loading: () => Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -464,50 +599,12 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                   error: (_, __) => const SizedBox.shrink(),
                 ),
 
-                const SizedBox(height: 28),
-
-                // ─── Recently Added ───────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: SectionHeader(
-                    title: 'Recently Added',
-                    subtitle: 'New arrivals from farms',
-                    actionLabel: 'See all',
-                    onAction: () {},
-                  ),
-                ).animate(delay: 450.ms).fadeIn(),
-
-                const SizedBox(height: 14),
-
-                ref.watch(recentProductsProvider).when(
-                  data: (products) => products.isEmpty
-                      ? const SizedBox.shrink()
-                      : SizedBox(
-                          height: 280,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            itemCount: products.length,
-                            separatorBuilder: (_, _) => const SizedBox(width: 14),
-                            itemBuilder: (context, i) {
-                              final p = products[i];
-                              return ProductCard(
-                                product: p,
-                                onTap: () => context.push('/product/${p.id}'),
-                                onAddToCart: () => _showAddToCartSnackBar(context, p),
-                              );
-                            },
-                          ),
-                        ),
-                  loading: () => _HorizontalShimmerList(),
-                  error: (_, __) => const SizedBox.shrink(),
-                ),
-
                 const SizedBox(height: 100),
               ],
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -543,7 +640,29 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
     );
   }
 
+  String _categoryEmoji(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('maize') || n.contains('corn')) return '🌽';
+    if (n.contains('cassava')) return '🍠';
+    if (n.contains('yam')) return '🍠';
+    if (n.contains('rice')) return '🍚';
+    if (n.contains('plantain') || n.contains('banana')) return '🍌';
+    if (n.contains('tomato')) return '🍅';
+    if (n.contains('pepper')) return '🌶️';
+    if (n.contains('onion')) return '🧅';
+    if (n.contains('cabbage')) return '🥬';
+    if (n.contains('carrot')) return '🥕';
+    if (n.contains('lettuce')) return '🥗';
+    if (n.contains('garden egg') || n.contains('eggplant')) return '🍆';
+    if (n.contains('okra')) return '🌿';
+    if (n.contains('cocoa')) return '🍫';
+    if (n.contains('fruit')) return '🍎';
+    if (n.contains('vegetable') || n.contains('veggie')) return '🥦';
+    return '🌾';
+  }
+
   void _showAddToCartSnackBar(BuildContext context, Product p) {
+    ref.read(cartProvider.notifier).add(p);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(

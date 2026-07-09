@@ -23,6 +23,8 @@ class ApiConstants {
   // ─── Produce ───────────────────────────────────────────────────────────────
   static const String produce = '/produce';
   static const String produceById = '/produce/{id}';
+  static const String agentProduceRecords = '/agent/produce-records';
+  static const String agentProduceRecordById = '/agent/produce-records/{id}';
 
   // ─── Logistics ─────────────────────────────────────────────────────────────
   static const String logistics = '/logistics';
@@ -40,6 +42,7 @@ class ApiConstants {
 
   // ─── Customer — Orders ─────────────────────────────────────────────────────
   static const String orders = '/orders';
+  static const String placeOrder = '/customers/orders';
   static const String orderById = '/orders/{id}';
   static const String cancelOrder = '/orders/{id}/cancel';
 

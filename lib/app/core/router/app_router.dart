@@ -11,11 +11,14 @@ import '../../../features/farmers/presentation/screens/farmer_profile_screen.dar
 import '../../../features/farmers/presentation/screens/register_farmer_screen.dart';
 import '../../../features/farms/presentation/screens/farm_registration_screen.dart';
 import '../../../features/produce/presentation/screens/produce_collection_screen.dart';
+import '../../../features/produce/presentation/screens/produce_detail_screen.dart';
 import '../../../features/produce/presentation/screens/produce_list_screen.dart';
+import '../../../shared/models/produce_entry.dart';
 import '../../../features/logistics/presentation/screens/logistics_screen.dart';
 import '../../../features/payments/presentation/screens/payments_screen.dart';
 import '../../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../../features/profile/presentation/screens/profile_screen.dart';
+import '../../../features/customer/cart/cart_screen.dart';
 import '../../../features/customer/home/presentation/screens/customer_home_screen.dart';
 import '../../../features/customer/orders/presentation/screens/orders_screen.dart';
 import '../../../features/customer/chats/presentation/screens/chats_screen.dart';
@@ -58,6 +61,12 @@ final routerProvider = Provider<GoRouter>((ref) => GoRouter(
       builder: (_, state) => ProductDetailScreen(
         productId: state.pathParameters['id'] ?? '',
       ),
+    ),
+
+    // ─── Cart ─────────────────────────────────────────────────────────────────
+    GoRoute(
+      path: '/customer/cart',
+      builder: (_, _) => const CartScreen(),
     ),
 
     // ─── Agent Shell (5 tabs) ──────────────────────────────────────────────────
@@ -107,6 +116,12 @@ final routerProvider = Provider<GoRouter>((ref) => GoRouter(
                   path: 'create',
                   builder: (_, state) => ProduceCollectionScreen(
                     farmerId: state.uri.queryParameters['farmerId'],
+                  ),
+                ),
+                GoRoute(
+                  path: 'detail',
+                  builder: (_, state) => ProduceDetailScreen(
+                    record: state.extra as ProduceEntry,
                   ),
                 ),
               ],

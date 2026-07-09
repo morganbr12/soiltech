@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../shared/models/app_models.dart';
+import '../../shared/models/produce_entry.dart';
 import '../../app/core/theme/app_colors.dart';
 
 class StatusBadge extends StatelessWidget {
@@ -107,6 +108,26 @@ class StatusBadge extends StatelessWidget {
           label: 'Delivered',
           color: AppColors.successLight,
           textColor: AppColors.success,
+        ),
+    };
+  }
+
+  factory StatusBadge.fromProduceStatus(ProduceStatus status) {
+    return switch (status) {
+      ProduceStatus.pending => const StatusBadge(
+          label: 'Pending',
+          color: Color(0xFFFFF3E0),
+          textColor: Color(0xFFE65100),
+        ),
+      ProduceStatus.approved => const StatusBadge(
+          label: 'Approved',
+          color: AppColors.successLight,
+          textColor: AppColors.success,
+        ),
+      ProduceStatus.rejected => const StatusBadge(
+          label: 'Rejected',
+          color: AppColors.errorLight,
+          textColor: AppColors.error,
         ),
     };
   }

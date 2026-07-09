@@ -69,11 +69,8 @@ class _ProductCardState extends State<ProductCard> {
                     errorWidget: (_, __, ___) => Container(
                       height: 118,
                       color: AppColors.primaryContainer,
-                      child: Center(
-                        child: Text(
-                          p.category.emoji,
-                          style: const TextStyle(fontSize: 36),
-                        ),
+                      child: const Center(
+                        child: Icon(Icons.agriculture_rounded, size: 36, color: AppColors.primaryLight),
                       ),
                     ),
                   ),
@@ -162,13 +159,16 @@ class _ProductCardState extends State<ProductCard> {
                       ),
                       const SizedBox(width: 4),
                       const Icon(Icons.location_on_outlined, size: 10, color: AppColors.primaryLight),
-                      Text(
-                        p.distanceKm > 0
-                            ? '${p.distanceKm.toStringAsFixed(1)}km'
-                            : p.location.split(',').first.trim(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: theme.colorScheme.onSurfaceVariant,
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          p.location.split(',').first.trim(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -239,7 +239,7 @@ class _ProductCardState extends State<ProductCard> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  RatingWidget(rating: p.rating, reviewCount: p.reviewCount, compact: true),
+                  RatingWidget(rating: p.averageRating, reviewCount: p.reviewCount, compact: true),
                 ],
               ),
             ),
@@ -279,7 +279,7 @@ class _ProductCardState extends State<ProductCard> {
                   width: 90,
                   height: 90,
                   color: AppColors.primaryContainer,
-                  child: Center(child: Text(p.category.emoji, style: const TextStyle(fontSize: 28))),
+                  child: const Center(child: Icon(Icons.agriculture_rounded, size: 28, color: AppColors.primaryLight)),
                 ),
               ),
             ),
@@ -312,7 +312,7 @@ class _ProductCardState extends State<ProductCard> {
                           ),
                         ),
                         const Spacer(),
-                        RatingWidget(rating: p.rating, compact: true),
+                        RatingWidget(rating: p.averageRating, compact: true),
                       ],
                     ),
                   ],

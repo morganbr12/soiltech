@@ -1,20 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/core/theme/app_colors.dart';
-import '../../../../shared/extensions/extensions.dart';
-import '../../../../shared/models/app_models.dart';
-import '../../../../shared/models/dummy_data.dart';
-import '../../../../shared/widgets/offline_banner.dart';
-import '../../../../shared/widgets/status_badge.dart';
+import '../../data/logistics_repository.dart';
 
-class LogisticsScreen extends StatefulWidget {
+class LogisticsScreen extends ConsumerStatefulWidget {
   const LogisticsScreen({super.key});
 
   @override
-  State<LogisticsScreen> createState() => _LogisticsScreenState();
+  ConsumerState<LogisticsScreen> createState() => _LogisticsScreenState();
 }
 
-class _LogisticsScreenState extends State<LogisticsScreen>
+class _LogisticsScreenState extends ConsumerState<LogisticsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
@@ -33,228 +30,236 @@ class _LogisticsScreenState extends State<LogisticsScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final allRequests = DummyData.pickupRequests;
-    final active = allRequests.where((r) =>
-        r.status == LogisticsStatus.inTransit || r.status == LogisticsStatus.assigned).toList();
-    final pending = allRequests.where((r) => r.status == LogisticsStatus.pending).toList();
-    final completed = allRequests.where((r) => r.status == LogisticsStatus.delivered).toList();
+    final isDark = theme.brightness == Brightness.dark;
+    final requestsAsync = ref.watch(pickupRequestsProvider);
 
     return Scaffold(
+      backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
       appBar: AppBar(
-        title: const Text('Logistics'),
+        title: const Text('Field Operations', style: TextStyle(fontWeight: FontWeight.w700)),
+        centerTitle: false,
+        backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: () => ref.invalidate(pickupRequestsProvider),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primary,
           unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
           indicatorColor: AppColors.primary,
-          indicatorWeight: 3,
-          labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-          unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-          tabs: [
-            Tab(text: 'Active (${active.length})'),
-            Tab(text: 'Pending (${pending.length})'),
+          indicatorSize: TabBarIndicatorSize.label,
+          labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          tabs: const [
+            Tab(text: 'Active'),
+            Tab(text: 'Pending'),
             Tab(text: 'Completed'),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _RequestTab(requests: active, emptyIcon: Icons.local_shipping_outlined, emptyTitle: 'No Active Pickups'),
-          _RequestTab(requests: pending, emptyIcon: Icons.hourglass_empty_rounded, emptyTitle: 'No Pending Requests'),
-          _RequestTab(requests: completed, emptyIcon: Icons.check_circle_outline_rounded, emptyTitle: 'No Completed Deliveries'),
-        ],
+      body: requestsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        error: (e, _) => _ErrorState(
+          error: e.toString(),
+          onRetry: () => ref.invalidate(pickupRequestsProvider),
+        ),
+        data: (all) {
+          final active = all.where((r) => r.isAssigned || r.isInTransit).toList();
+          final pending = all.where((r) => r.isPending).toList();
+          final completed = all.where((r) => r.isCompleted).toList();
+
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _RequestList(
+                requests: active,
+                emptyIcon: Icons.local_shipping_outlined,
+                emptyTitle: 'No active pickups',
+                emptySubtitle: 'Assigned pickups will appear here.',
+                onRefresh: () async => ref.invalidate(pickupRequestsProvider),
+              ),
+              _RequestList(
+                requests: pending,
+                emptyIcon: Icons.hourglass_empty_rounded,
+                emptyTitle: 'No pending requests',
+                emptySubtitle: 'Create a pickup request from a produce record.',
+                onRefresh: () async => ref.invalidate(pickupRequestsProvider),
+              ),
+              _RequestList(
+                requests: completed,
+                emptyIcon: Icons.check_circle_outline_rounded,
+                emptyTitle: 'No completed pickups',
+                emptySubtitle: 'Completed pickups will appear here.',
+                onRefresh: () async => ref.invalidate(pickupRequestsProvider),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _RequestTab extends StatelessWidget {
-  final List<PickupRequest> requests;
+// ─── List tab ─────────────────────────────────────────────────────────────────
+
+class _RequestList extends StatelessWidget {
+  final List<AgentPickupRequest> requests;
   final IconData emptyIcon;
   final String emptyTitle;
+  final String emptySubtitle;
+  final Future<void> Function() onRefresh;
 
-  const _RequestTab({
+  const _RequestList({
     required this.requests,
     required this.emptyIcon,
     required this.emptyTitle,
+    required this.emptySubtitle,
+    required this.onRefresh,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (requests.isEmpty) {
-      return AppEmptyState(
-        icon: emptyIcon,
-        title: emptyTitle,
-        subtitle: 'Pickup requests will appear here.',
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-      itemCount: requests.length,
-      itemBuilder: (_, i) => _PickupCard(request: requests[i], index: i),
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      color: AppColors.primary,
+      child: requests.isEmpty
+          ? CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _EmptyState(icon: emptyIcon, title: emptyTitle, subtitle: emptySubtitle),
+                ),
+              ],
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: requests.length,
+              separatorBuilder: (_, idx) => const SizedBox(height: 14),
+              itemBuilder: (_, i) => _PickupCard(request: requests[i], index: i),
+            ),
     );
   }
 }
 
-class _PickupCard extends StatelessWidget {
-  final PickupRequest request;
-  final int index;
+// ─── Pickup card ──────────────────────────────────────────────────────────────
 
+class _PickupCard extends ConsumerStatefulWidget {
+  final AgentPickupRequest request;
+  final int index;
   const _PickupCard({required this.request, required this.index});
 
   @override
+  ConsumerState<_PickupCard> createState() => _PickupCardState();
+}
+
+class _PickupCardState extends ConsumerState<_PickupCard> {
+  bool _confirming = false;
+
+  @override
   Widget build(BuildContext context) {
+    final r = widget.request;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        color: isDark ? AppColors.cardDark : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.05), blurRadius: 10, offset: const Offset(0, 3))],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // ── Header ──────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.cardGradient,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.local_shipping_rounded, color: Colors.white, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            request.farmerName,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                          ),
-                          Text(
-                            '${request.cropType} · ${request.weightKg.toStringAsFixed(0)} kg',
-                            style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                    StatusBadge.fromLogisticsStatus(request.status),
-                  ],
+                Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(gradient: AppColors.cardGradient, borderRadius: BorderRadius.circular(13)),
+                  child: const Icon(Icons.local_shipping_rounded, color: Colors.white, size: 22),
                 ),
-                const SizedBox(height: 16),
-
-                // Route visualization
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Column(
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: const BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        Container(
-                          width: 2,
-                          height: 32,
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                        ),
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: Colors.transparent,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.primary, width: 2),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            request.pickupLocation,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Pickup',
-                            style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                          const SizedBox(height: 14),
-                          Text(
-                            request.deliveryLocation,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Delivery',
-                            style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(r.farmerName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      if (r.cropType != null)
+                        Text(r.cropType!, style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
+                    ],
+                  ),
                 ),
+                _StatusChip(status: r.status),
               ],
             ),
           ),
 
-          // Driver info (if assigned)
-          if (request.driverName != null) ...[
-            Divider(
-              height: 1,
-              color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8),
+          // ── Route ────────────────────────────────────────────────────────────
+          if (r.pickupLocation != null || r.deliveryLocation != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Column(
+                    children: [
+                      Container(width: 10, height: 10, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
+                      Container(width: 2, height: 28, color: AppColors.primary.withValues(alpha: 0.3)),
+                      Container(width: 10, height: 10, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.primary, width: 2))),
+                    ],
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(r.pickupLocation ?? 'Farm location', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text('Pickup', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
+                        const SizedBox(height: 12),
+                        Text(r.deliveryLocation ?? '—', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text('Delivery', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
+
+          if (r.scheduledDate != null) ...[
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.primaryLight),
+                  const SizedBox(width: 6),
+                  Text('Scheduled: ${r.scheduledDate}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                ],
+              ),
+            ),
+          ],
+
+          // ── Driver info ──────────────────────────────────────────────────────
+          if (r.hasDriver) ...[
+            const Divider(height: 1, indent: 16, endIndent: 16),
             Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.secondaryContainer.withValues(alpha: 0.5),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        request.driverName!.split(' ').map((n) => n[0]).take(2).join(),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                      ),
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppColors.primaryContainer,
+                    child: Text(
+                      (r.driverName ?? 'D').substring(0, 1).toUpperCase(),
+                      style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary, fontSize: 15),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -262,97 +267,39 @@ class _PickupCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          request.driverName!,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                        if (request.vehicleNumber != null)
-                          Text(
-                            request.vehicleNumber!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
+                        Text(r.driverName!, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        if (r.vehicleNumber != null)
+                          Text(r.vehicleNumber!, style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
-                  if (request.status == LogisticsStatus.inTransit)
-                    Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.only(right: 6),
-                      decoration: const BoxDecoration(
-                        color: AppColors.success,
-                        shape: BoxShape.circle,
-                      ),
+                  if (r.driverPhone != null)
+                    IconButton(
+                      icon: const Icon(Icons.phone_rounded, size: 20, color: AppColors.primary),
+                      style: IconButton.styleFrom(backgroundColor: AppColors.primaryContainer.withValues(alpha: 0.4), padding: const EdgeInsets.all(8)),
+                      onPressed: () {},
                     ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.phone_rounded, size: 20, color: AppColors.primary),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.primaryContainer.withValues(alpha: 0.3),
-                      padding: const EdgeInsets.all(8),
-                    ),
-                  ),
                 ],
               ),
             ),
           ],
 
-          // ETA
-          if (request.estimatedPickup != null && request.status != LogisticsStatus.delivered) ...[
-            Divider(
-              height: 1,
-              color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  Icon(Icons.access_time_rounded, size: 14, color: AppColors.primary),
-                  const SizedBox(width: 6),
-                  Text(
-                    request.status == LogisticsStatus.inTransit
-                        ? 'ETA: ${request.estimatedPickup!.timeAgo.replaceAll(' ago', '')}'
-                        : 'Est. pickup: ${request.estimatedPickup!.displayTime}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    request.requestDate.timeAgo,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // Live tracking button (active only)
-          if (request.status == LogisticsStatus.inTransit) ...[
-            Divider(
-              height: 1,
-              color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8),
-            ),
+          // ── Confirm collected button (driver dispatched, waiting at field) ───
+          if (r.isAssigned && r.hasDriver) ...[
+            const Divider(height: 1, indent: 16, endIndent: 16),
             Padding(
               padding: const EdgeInsets.all(12),
               child: SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.map_rounded, size: 16),
-                  label: const Text('Track Live'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                child: FilledButton.icon(
+                  onPressed: _confirming ? null : () => _confirmCollected(r.id),
+                  icon: _confirming
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_circle_rounded, size: 18),
+                  label: Text(_confirming ? 'Confirming…' : 'Produce Collected'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
@@ -362,9 +309,114 @@ class _PickupCard extends StatelessWidget {
           ],
         ],
       ),
-    )
-        .animate(delay: Duration(milliseconds: 80 * index))
-        .fadeIn(duration: 300.ms)
-        .slideY(begin: 0.05, end: 0);
+    ).animate(delay: Duration(milliseconds: 60 * widget.index)).fadeIn(duration: 300.ms).slideY(begin: 0.04, end: 0);
+  }
+
+  Future<void> _confirmCollected(String pickupId) async {
+    setState(() => _confirming = true);
+    try {
+      await ref.read(logisticsRepositoryProvider).updatePickupStatus(pickupId, 'completed');
+      ref.invalidate(pickupRequestsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(children: [
+              Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Text('Produce collected confirmed'),
+            ]),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _confirming = false);
+    }
+  }
+}
+
+// ─── Status chip ──────────────────────────────────────────────────────────────
+
+class _StatusChip extends StatelessWidget {
+  final String status;
+  const _StatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (status) {
+      'pending' => ('Pending', const Color(0xFFF4A261)),
+      'assigned' || 'dispatched' => ('Assigned', AppColors.info),
+      'in_transit' || 'inTransit' => ('In Transit', AppColors.primary),
+      'completed' || 'delivered' => ('Completed', AppColors.success),
+      _ => (status, AppColors.primaryLight),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+    );
+  }
+}
+
+// ─── Empty state ──────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  const _EmptyState({required this.icon, required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 64, color: AppColors.primaryLight.withValues(alpha: 0.5)),
+          const SizedBox(height: 16),
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(subtitle, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant), textAlign: TextAlign.center),
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms);
+  }
+}
+
+// ─── Error state ──────────────────────────────────────────────────────────────
+
+class _ErrorState extends StatelessWidget {
+  final String error;
+  final VoidCallback onRetry;
+  const _ErrorState({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_rounded, size: 52, color: AppColors.primaryLight),
+            const SizedBox(height: 16),
+            const Text('Could not load pickup requests', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Text(error, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant), textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh_rounded), label: const Text('Retry')),
+          ],
+        ),
+      ),
+    );
   }
 }

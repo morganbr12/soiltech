@@ -95,6 +95,39 @@ class _PaymentsApi implements PaymentsApi {
   }
 
   @override
+  Future<ApiResponse<PaymentRecord>> createPayment(
+    Map<String, dynamic> body,
+  ) async {
+    final _extra = <String, dynamic>{};
+    final queryParameters = <String, dynamic>{};
+    final _headers = <String, dynamic>{};
+    final _data = <String, dynamic>{};
+    _data.addAll(body);
+    final _options = _setStreamType<ApiResponse<PaymentRecord>>(
+      Options(method: 'POST', headers: _headers, extra: _extra)
+          .compose(
+            _dio.options,
+            '/payments',
+            queryParameters: queryParameters,
+            data: _data,
+          )
+          .copyWith(baseUrl: _combineBaseUrls(_dio.options.baseUrl, baseUrl)),
+    );
+    final _result = await _dio.fetch<Map<String, dynamic>>(_options);
+    late ApiResponse<PaymentRecord> _value;
+    try {
+      _value = ApiResponse<PaymentRecord>.fromJson(
+        _result.data!,
+        (json) => PaymentRecord.fromJson(json as Map<String, dynamic>),
+      );
+    } on Object catch (e, s) {
+      errorLogger?.logError(e, s, _options, response: _result);
+      rethrow;
+    }
+    return _value;
+  }
+
+  @override
   Future<ApiResponse<PaymentRecord>> markAsPaid(
     String id,
     Map<String, dynamic> body,

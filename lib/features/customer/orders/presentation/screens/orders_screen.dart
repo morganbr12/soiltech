@@ -107,17 +107,25 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           controller: _tabController,
           children: List.generate(4, (tabIndex) {
             final list = _filter(orders, tabIndex);
-            if (list.isEmpty) {
-              return _EmptyTab(tabIndex: tabIndex);
-            }
             return RefreshIndicator(
               onRefresh: () async => ref.invalidate(allOrdersProvider),
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                itemCount: list.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 14),
-                itemBuilder: (context, i) => _OrderCard(order: list[i]),
-              ),
+              child: list.isEmpty
+                  ? CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _EmptyTab(tabIndex: tabIndex),
+                        ),
+                      ],
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: list.length,
+                      separatorBuilder: (_, idx) => const SizedBox(height: 14),
+                      itemBuilder: (context, i) => _OrderCard(order: list[i]),
+                    ),
             );
           }),
         ),
@@ -274,7 +282,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
 
           const Divider(height: 1, indent: 16, endIndent: 16),
 
-          // ─── Timeline toggle ────────────────────────────────────────────────
+          // ─── Expand toggle ──────────────────────────────────────────────────
           InkWell(
             onTap: _toggleExpand,
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
@@ -283,7 +291,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
               child: Row(
                 children: [
                   Text(
-                    'Order Timeline',
+                    'Order Details',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary),
                   ),
                   const Spacer(),
@@ -297,7 +305,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
             ),
           ),
 
-          if (_expanded) _TimelineSection(orderId: o.id, preloaded: o.timeline),
+          if (_expanded) _OrderDetailSection(order: o),
         ],
       ),
     ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.05, end: 0);
@@ -309,110 +317,97 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
   }
 }
 
-// ─── Timeline section (fetches detail if needed) ──────────────────────────────
+// ─── Order detail section — fetches items + timeline ─────────────────────────
 
-class _TimelineSection extends ConsumerWidget {
-  final String orderId;
-  final List<OrderTimeline> preloaded;
-
-  const _TimelineSection({required this.orderId, required this.preloaded});
+class _OrderDetailSection extends ConsumerWidget {
+  final CustomerOrder order;
+  const _OrderDetailSection({required this.order});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (preloaded.isNotEmpty) {
-      return _buildTimeline(context, preloaded);
-    }
+    final detailAsync = ref.watch(orderDetailProvider(order.id));
+    final theme = Theme.of(context);
 
-    final detailAsync = ref.watch(orderDetailProvider(orderId));
     return detailAsync.when(
       loading: () => const Padding(
         padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
       ),
-      error: (_, _) => Padding(
+      error: (err, st) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Text(
-          'Could not load timeline',
-          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
+        child: Text('Could not load details',
+            style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
       ),
-      data: (detail) => detail.timeline.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Text(
-                'No timeline events yet',
-                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-            )
-          : _buildTimeline(context, detail.timeline),
-    );
-  }
+      data: (detail) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Items ─────────────────────────────────────────────────────────
+            if (detail.items.isNotEmpty) ...[
+              _SectionLabel(label: 'Items Ordered'),
+              const SizedBox(height: 8),
+              ...detail.items.map((item) => _ItemRow(item: item, theme: theme)),
+              const SizedBox(height: 12),
+            ],
 
-  Widget _buildTimeline(BuildContext context, List<OrderTimeline> events) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Column(
-        children: events.asMap().entries.map((entry) {
-          final i = entry.key;
-          final step = entry.value;
-          final isLast = i == events.length - 1;
-          final isCurrent = i == events.length - 1;
-
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Column(
-                children: [
-                  Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isCurrent ? AppColors.primary : AppColors.primaryLight,
-                      border: Border.all(
-                        color: isCurrent ? AppColors.primary : AppColors.primaryLight,
-                        width: 2,
-                      ),
+            // ── Timeline ──────────────────────────────────────────────────────
+            _SectionLabel(label: 'Order Timeline'),
+            const SizedBox(height: 8),
+            if (detail.timeline.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('No updates yet',
+                    style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
+              )
+            else
+              ...detail.timeline.asMap().entries.map((e) {
+                final i = e.key;
+                final step = e.value;
+                final isLast = i == detail.timeline.length - 1;
+                final isCurrent = isLast;
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Column(
+                      children: [
+                        Container(
+                          width: 20, height: 20,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isCurrent ? AppColors.primary : AppColors.primaryLight,
+                          ),
+                          child: const Icon(Icons.check_rounded, size: 11, color: Colors.white),
+                        ),
+                        if (!isLast) Container(width: 2, height: 36, color: AppColors.primaryLight),
+                      ],
                     ),
-                    child: const Icon(Icons.check_rounded, size: 11, color: Colors.white),
-                  ),
-                  if (!isLast)
-                    Container(width: 2, height: 36, color: AppColors.primaryLight),
-                ],
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        step.status.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: isCurrent ? AppColors.primary : theme.colorScheme.onSurface,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(step.status.toUpperCase(),
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                                    color: isCurrent ? AppColors.primary : theme.colorScheme.onSurface)),
+                            if (step.note.isNotEmpty)
+                              Text(step.note,
+                                  style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
+                            Text(_formatTime(step.createdAt),
+                                style: const TextStyle(fontSize: 10, color: AppColors.primaryLight, fontWeight: FontWeight.w500)),
+                          ],
                         ),
                       ),
-                      Text(
-                        step.note,
-                        style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
-                      ),
-                      Text(
-                        _formatTime(step.createdAt),
-                        style: const TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          );
-        }).toList(),
-      ),
-    ).animate().fadeIn(duration: 250.ms);
+                    ),
+                  ],
+                );
+              }),
+          ],
+        ),
+      ).animate().fadeIn(duration: 250.ms),
+    );
   }
 
   String _formatTime(DateTime d) {
@@ -420,5 +415,58 @@ class _TimelineSection extends ConsumerWidget {
     final h = d.hour.toString().padLeft(2, '0');
     final m = d.minute.toString().padLeft(2, '0');
     return '${d.day} ${months[d.month - 1]}, $h:$m';
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  const _SectionLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(label,
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            letterSpacing: 0.5));
+  }
+}
+
+class _ItemRow extends StatelessWidget {
+  final OrderItem item;
+  final ThemeData theme;
+  const _ItemRow({required this.item, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primaryContainer,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.agriculture_rounded, size: 18, color: AppColors.primary),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.productId, // replaced by name once API returns it
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text('Qty: ${item.quantity}  ·  GHS ${item.unitPrice.toStringAsFixed(2)} each',
+                    style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          Text('GHS ${item.subtotal.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary)),
+        ],
+      ),
+    );
   }
 }

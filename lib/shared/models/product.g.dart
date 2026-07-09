@@ -9,7 +9,7 @@ part of 'product.dart';
 _Product _$ProductFromJson(Map<String, dynamic> json) => _Product(
   id: json['id'] as String,
   name: json['name'] as String,
-  description: json['description'] as String,
+  description: json['description'] as String? ?? '',
   imageUrl: json['imageUrl'] as String,
   galleryImages:
       (json['galleryImages'] as List<dynamic>?)
@@ -18,21 +18,24 @@ _Product _$ProductFromJson(Map<String, dynamic> json) => _Product(
       const [],
   pricePerUnit: (json['pricePerUnit'] as num).toDouble(),
   unit: json['unit'] as String,
-  availableQuantity: (json['availableQuantity'] as num).toDouble(),
-  farmerId: json['farmerId'] as String,
+  stockQuantity: (json['stockQuantity'] as num).toInt(),
+  categoryId: json['categoryId'] as String,
+  produceListingId: json['produceListingId'] as String?,
   farmerName: json['farmerName'] as String,
-  lbcName: json['lbcName'] as String,
-  location: json['location'] as String,
-  distanceKm: (json['distanceKm'] as num).toDouble(),
-  rating: (json['rating'] as num).toDouble(),
-  reviewCount: (json['reviewCount'] as num).toInt(),
-  category: $enumDecode(_$ProductCategoryEnumMap, json['category']),
-  harvestDate: DateTime.parse(json['harvestDate'] as String),
-  freshnessLabel: json['freshnessLabel'] as String,
+  location: json['location'] as String? ?? '',
+  freshnessLabel: json['freshnessLabel'] as String? ?? '',
+  averageRating: (json['averageRating'] as num?)?.toDouble() ?? 0.0,
+  reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
   isFeatured: json['isFeatured'] as bool? ?? false,
   isOnDeal: json['isOnDeal'] as bool? ?? false,
-  originalPrice: (json['originalPrice'] as num?)?.toDouble(),
   isAvailable: json['isAvailable'] as bool? ?? true,
+  originalPrice: (json['originalPrice'] as num?)?.toDouble(),
+  createdAt: json['createdAt'] == null
+      ? null
+      : DateTime.parse(json['createdAt'] as String),
+  updatedAt: json['updatedAt'] == null
+      ? null
+      : DateTime.parse(json['updatedAt'] as String),
 );
 
 Map<String, dynamic> _$ProductToJson(_Product instance) => <String, dynamic>{
@@ -43,33 +46,20 @@ Map<String, dynamic> _$ProductToJson(_Product instance) => <String, dynamic>{
   'galleryImages': instance.galleryImages,
   'pricePerUnit': instance.pricePerUnit,
   'unit': instance.unit,
-  'availableQuantity': instance.availableQuantity,
-  'farmerId': instance.farmerId,
+  'stockQuantity': instance.stockQuantity,
+  'categoryId': instance.categoryId,
+  'produceListingId': instance.produceListingId,
   'farmerName': instance.farmerName,
-  'lbcName': instance.lbcName,
   'location': instance.location,
-  'distanceKm': instance.distanceKm,
-  'rating': instance.rating,
-  'reviewCount': instance.reviewCount,
-  'category': _$ProductCategoryEnumMap[instance.category]!,
-  'harvestDate': instance.harvestDate.toIso8601String(),
   'freshnessLabel': instance.freshnessLabel,
+  'averageRating': instance.averageRating,
+  'reviewCount': instance.reviewCount,
   'isFeatured': instance.isFeatured,
   'isOnDeal': instance.isOnDeal,
-  'originalPrice': instance.originalPrice,
   'isAvailable': instance.isAvailable,
-};
-
-const _$ProductCategoryEnumMap = {
-  ProductCategory.tomatoes: 'tomatoes',
-  ProductCategory.pepper: 'pepper',
-  ProductCategory.onion: 'onion',
-  ProductCategory.cabbage: 'cabbage',
-  ProductCategory.carrot: 'carrot',
-  ProductCategory.lettuce: 'lettuce',
-  ProductCategory.gardenEggs: 'gardenEggs',
-  ProductCategory.okra: 'okra',
-  ProductCategory.other: 'other',
+  'originalPrice': instance.originalPrice,
+  'createdAt': instance.createdAt?.toIso8601String(),
+  'updatedAt': instance.updatedAt?.toIso8601String(),
 };
 
 _ProductReview _$ProductReviewFromJson(Map<String, dynamic> json) =>

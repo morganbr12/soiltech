@@ -1,28 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/core/constants/app_constants.dart';
 import '../../../../app/core/theme/app_colors.dart';
-import '../../../../shared/models/dummy_data.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
+import '../../../farmers/presentation/providers/farmers_provider.dart';
 
-class ProduceCollectionScreen extends StatefulWidget {
+class ProduceCollectionScreen extends ConsumerStatefulWidget {
   final String? farmerId;
   const ProduceCollectionScreen({super.key, this.farmerId});
 
   @override
-  State<ProduceCollectionScreen> createState() => _ProduceCollectionScreenState();
+  ConsumerState<ProduceCollectionScreen> createState() => _ProduceCollectionScreenState();
 }
 
-class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
+class _ProduceCollectionScreenState extends ConsumerState<ProduceCollectionScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isSavingDraft = false;
   int _photoCount = 0;
 
   String? _selectedFarmerId;
+  String? _selectedFarmId;
   String? _selectedCropType;
   String? _selectedGrade;
   final _weightController = TextEditingController();
@@ -54,6 +56,13 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
     return weight * price;
   }
 
+  void _onFarmerChanged(String? farmerId) {
+    setState(() {
+      _selectedFarmerId = farmerId;
+      _selectedFarmId = null; // reset farm when farmer changes
+    });
+  }
+
   Future<void> _submit({bool isDraft = false}) async {
     if (!isDraft && !(_formKey.currentState?.validate() ?? false)) return;
     setState(() {
@@ -79,10 +88,28 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
     }
   }
 
+  InputDecoration _dropdownDecoration(String label, IconData icon, bool isDark) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, size: 20),
+      filled: true,
+      fillColor: isDark ? const Color(0xFF1E2E20) : const Color(0xFFF0F6F1),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFD4E4D4), width: 1),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final farmersAsync = ref.watch(allFarmersProvider);
+    final farmsAsync = _selectedFarmerId != null
+        ? ref.watch(farmerFarmsProvider(_selectedFarmerId!))
+        : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -97,8 +124,7 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
             onPressed: _isSavingDraft ? null : () => _submit(isDraft: true),
             child: _isSavingDraft
                 ? const SizedBox(
-                    width: 16,
-                    height: 16,
+                    width: 16, height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                   )
                 : const Text('Save Draft'),
@@ -122,64 +148,90 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
               ).animate().fadeIn(duration: 400.ms),
               const SizedBox(height: 24),
 
-              // Farmer selection
+              // ── Step 1: Farmer & Farm ───────────────────────────────────────
               _SectionTitle(title: 'Farmer & Farm', step: 1),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _selectedFarmerId,
-                decoration: InputDecoration(
-                  labelText: 'Select Farmer',
-                  prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
-                  filled: true,
-                  fillColor: isDark ? const Color(0xFF1E2E20) : const Color(0xFFF0F6F1),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(
-                      color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFD4E4D4),
-                      width: 1,
-                    ),
-                  ),
-                ),
-                items: DummyData.farmers.map((f) {
-                  return DropdownMenuItem(
-                    value: f.id,
-                    child: Text('${f.name} (${f.community})',
-                        style: const TextStyle(fontSize: 14)),
-                  );
-                }).toList(),
-                onChanged: (v) => setState(() => _selectedFarmerId = v),
-                validator: (v) => v == null ? 'Select a farmer' : null,
-              ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
-              const SizedBox(height: 24),
 
-              // Produce details
+              // Farmer dropdown
+              farmersAsync.when(
+                loading: () => _DropdownSkeleton(isDark: isDark, label: 'Select Farmer'),
+                error: (e, _) => _DropdownError(
+                  label: 'Select Farmer',
+                  error: e.toString(),
+                  onRetry: () => ref.invalidate(allFarmersProvider),
+                  isDark: isDark,
+                ),
+                data: (farmers) => DropdownButtonFormField<String>(
+                  value: _selectedFarmerId,
+                  decoration: _dropdownDecoration('Select Farmer', Icons.person_outline_rounded, isDark),
+                  isExpanded: true,
+                  items: farmers.map((f) => DropdownMenuItem(
+                    value: f.id,
+                    child: Text(
+                      '${f.fullName}${f.region.isNotEmpty ? ' · ${f.region}' : ''}',
+                      style: const TextStyle(fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  )).toList(),
+                  onChanged: _onFarmerChanged,
+                  validator: (v) => v == null ? 'Select a farmer' : null,
+                ),
+              ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
+              const SizedBox(height: 14),
+
+              // Farm dropdown — shows after farmer is selected
+              if (_selectedFarmerId != null) ...[
+                farmsAsync!.when(
+                  loading: () => _DropdownSkeleton(isDark: isDark, label: 'Select Farm'),
+                  error: (e, _) => _DropdownError(
+                    label: 'Select Farm',
+                    error: e.toString(),
+                    onRetry: () => ref.invalidate(farmerFarmsProvider(_selectedFarmerId!)),
+                    isDark: isDark,
+                  ),
+                  data: (farms) => farms.isEmpty
+                      ? Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1E2E20) : const Color(0xFFF0F6F1),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFD4E4D4),
+                            ),
+                          ),
+                          child: Row(children: [
+                            const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.primaryLight),
+                            const SizedBox(width: 10),
+                            Text('No farms registered for this farmer',
+                                style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant)),
+                          ]),
+                        )
+                      : DropdownButtonFormField<String>(
+                          value: _selectedFarmId,
+                          decoration: _dropdownDecoration('Select Farm', Icons.landscape_outlined, isDark),
+                          isExpanded: true,
+                          items: farms.map((farm) => DropdownMenuItem(
+                            value: farm.id,
+                            child: Text(
+                              '${farm.name} · ${farm.community}',
+                              style: const TextStyle(fontSize: 14),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          )).toList(),
+                          onChanged: (v) => setState(() => _selectedFarmId = v),
+                        ),
+                ).animate(delay: 80.ms).fadeIn(duration: 300.ms).slideY(begin: -0.03, end: 0),
+                const SizedBox(height: 10),
+              ],
+              const SizedBox(height: 14),
+
+              // ── Step 2: Produce Details ─────────────────────────────────────
               _SectionTitle(title: 'Produce Details', step: 2),
               const SizedBox(height: 12),
 
-              // Crop type
               DropdownButtonFormField<String>(
                 value: _selectedCropType,
-                decoration: InputDecoration(
-                  labelText: 'Crop Type',
-                  prefixIcon: const Icon(Icons.grass_rounded, size: 20),
-                  filled: true,
-                  fillColor: isDark ? const Color(0xFF1E2E20) : const Color(0xFFF0F6F1),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(
-                      color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFD4E4D4),
-                      width: 1,
-                    ),
-                  ),
-                ),
+                decoration: _dropdownDecoration('Crop Type', Icons.grass_rounded, isDark),
                 items: AppConstants.cropTypes.map((c) {
                   return DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 14)));
                 }).toList(),
@@ -197,9 +249,7 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                       controller: _weightController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       prefixIcon: Icons.scale_rounded,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-                      ],
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
                       onChanged: (_) => setState(() {}),
                       validator: (v) {
                         if (v?.isEmpty == true) return 'Weight required';
@@ -232,9 +282,7 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                 controller: _moistureController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 prefixIcon: Icons.water_drop_outlined,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}')),
-                ],
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))],
                 validator: (v) {
                   if (v?.isEmpty == true) return 'Moisture required';
                   final val = double.tryParse(v!);
@@ -244,13 +292,13 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
               ).animate(delay: 180.ms).fadeIn(duration: 300.ms),
               const SizedBox(height: 24),
 
-              // Quality grade
+              // ── Step 3: Quality ─────────────────────────────────────────────
               _SectionTitle(title: 'Quality Assessment', step: 3),
               const SizedBox(height: 12),
               Row(
                 children: AppConstants.qualityGrades.map((grade) {
                   final isSelected = _selectedGrade == grade;
-                  Color gradeColor = switch (grade) {
+                  final gradeColor = switch (grade) {
                     'Grade A' => AppColors.success,
                     'Grade B' => AppColors.info,
                     'Grade C' => AppColors.warning,
@@ -260,40 +308,29 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                     child: GestureDetector(
                       onTap: () => setState(() => _selectedGrade = grade),
                       child: Container(
-                        margin: EdgeInsets.only(
-                          right: grade == AppConstants.qualityGrades.last ? 0 : 8,
-                        ),
+                        margin: EdgeInsets.only(right: grade == AppConstants.qualityGrades.last ? 0 : 8),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
                           color: isSelected
                               ? gradeColor.withValues(alpha: 0.12)
-                              : isDark
-                                  ? AppColors.surfaceVariantDark
-                                  : AppColors.surfaceVariantLight,
+                              : isDark ? AppColors.surfaceVariantDark : AppColors.surfaceVariantLight,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected ? gradeColor : Colors.transparent,
-                            width: 2,
-                          ),
+                          border: Border.all(color: isSelected ? gradeColor : Colors.transparent, width: 2),
                         ),
                         child: Column(
                           children: [
                             Text(
                               grade.replaceAll('Grade ', ''),
                               style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 16, fontWeight: FontWeight.w800,
                                 color: isSelected ? gradeColor : theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
                             Text(
                               grade.contains('Grade') ? grade.split(' ').first : grade,
                               style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: isSelected
-                                    ? gradeColor
-                                    : theme.colorScheme.onSurfaceVariant,
+                                fontSize: 10, fontWeight: FontWeight.w500,
+                                color: isSelected ? gradeColor : theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -305,7 +342,7 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
               ).animate(delay: 200.ms).fadeIn(duration: 300.ms),
               const SizedBox(height: 24),
 
-              // Photos
+              // ── Step 4: Photos ──────────────────────────────────────────────
               _SectionTitle(title: 'Produce Photos', step: 4),
               const SizedBox(height: 12),
               SizedBox(
@@ -318,15 +355,12 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                         if (_photoCount < AppConstants.maxUploadImages) _photoCount++;
                       }),
                       child: Container(
-                        width: 80,
-                        height: 80,
+                        width: 80, height: 80,
                         margin: const EdgeInsets.only(right: 8),
                         decoration: BoxDecoration(
                           color: AppColors.primaryContainer.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: AppColors.primary.withValues(alpha: 0.3),
-                          ),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -335,11 +369,7 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                             const SizedBox(height: 4),
                             Text(
                               '$_photoCount/${AppConstants.maxUploadImages}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600),
                             ),
                           ],
                         ),
@@ -348,8 +378,7 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                     ...List.generate(
                       _photoCount,
                       (i) => Container(
-                        width: 80,
-                        height: 80,
+                        width: 80, height: 80,
                         margin: const EdgeInsets.only(right: 8),
                         decoration: BoxDecoration(
                           color: AppColors.primaryContainer.withValues(alpha: 0.5),
@@ -357,25 +386,14 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                         ),
                         child: Stack(
                           children: [
-                            Center(
-                              child: Icon(
-                                Icons.image_rounded,
-                                color: AppColors.primary.withValues(alpha: 0.4),
-                                size: 32,
-                              ),
-                            ),
+                            Center(child: Icon(Icons.image_rounded, color: AppColors.primary.withValues(alpha: 0.4), size: 32)),
                             Positioned(
-                              top: 4,
-                              right: 4,
+                              top: 4, right: 4,
                               child: GestureDetector(
                                 onTap: () => setState(() => _photoCount--),
                                 child: Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.error,
-                                    shape: BoxShape.circle,
-                                  ),
+                                  width: 20, height: 20,
+                                  decoration: BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
                                   child: const Icon(Icons.close, size: 12, color: Colors.white),
                                 ),
                               ),
@@ -389,7 +407,7 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
               ).animate(delay: 220.ms).fadeIn(duration: 300.ms),
               const SizedBox(height: 24),
 
-              // Pricing
+              // ── Step 5: Pricing ─────────────────────────────────────────────
               _SectionTitle(title: 'Pricing', step: 5),
               const SizedBox(height: 12),
               Row(
@@ -407,24 +425,14 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: AppColors.cardGradient,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      decoration: BoxDecoration(gradient: AppColors.cardGradient, borderRadius: BorderRadius.circular(14)),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Est. Value',
-                            style: TextStyle(fontSize: 11, color: Colors.white70),
-                          ),
+                          const Text('Est. Value', style: TextStyle(fontSize: 11, color: Colors.white70)),
                           Text(
                             'GHS ${_totalValue.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
                           ),
                         ],
                       ),
@@ -456,10 +464,7 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1E2E20) : const Color(0xFFF0F6F1),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFD4E4D4),
-                      width: 1,
-                    ),
+                    border: Border.all(color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFD4E4D4), width: 1),
                   ),
                   child: Row(
                     children: [
@@ -469,10 +474,7 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Collection Date',
-                              style: TextStyle(fontSize: 11, color: AppColors.outlineLight),
-                            ),
+                            const Text('Collection Date', style: TextStyle(fontSize: 11, color: AppColors.outlineLight)),
                             Text(
                               '${_collectionDate.day}/${_collectionDate.month}/${_collectionDate.year}',
                               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
@@ -480,8 +482,7 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
                           ],
                         ),
                       ),
-                      Icon(Icons.arrow_drop_down_rounded,
-                          color: theme.colorScheme.onSurfaceVariant),
+                      Icon(Icons.arrow_drop_down_rounded, color: theme.colorScheme.onSurfaceVariant),
                     ],
                   ),
                 ),
@@ -497,7 +498,6 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
               ).animate(delay: 300.ms).fadeIn(duration: 300.ms),
               const SizedBox(height: 32),
 
-              // Submit
               AppButton(
                 label: 'Submit Collection',
                 icon: Icons.check_circle_rounded,
@@ -513,10 +513,61 @@ class _ProduceCollectionScreenState extends State<ProduceCollectionScreen> {
   }
 }
 
+// ─── Helper widgets ───────────────────────────────────────────────────────────
+
+class _DropdownSkeleton extends StatelessWidget {
+  final bool isDark;
+  final String label;
+  const _DropdownSkeleton({required this.isDark, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E2E20) : const Color(0xFFF0F6F1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFD4E4D4)),
+      ),
+      child: Row(children: [
+        const SizedBox(width: 12),
+        const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+        const SizedBox(width: 12),
+        Text('Loading $label…', style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ]),
+    );
+  }
+}
+
+class _DropdownError extends StatelessWidget {
+  final bool isDark;
+  final String label;
+  final String error;
+  final VoidCallback onRetry;
+  const _DropdownError({required this.isDark, required this.label, required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.error_outline_rounded, size: 18, color: AppColors.error),
+        const SizedBox(width: 8),
+        Expanded(child: Text('Could not load $label', style: const TextStyle(fontSize: 13))),
+        TextButton(onPressed: onRetry, child: const Text('Retry')),
+      ]),
+    );
+  }
+}
+
 class _SectionTitle extends StatelessWidget {
   final String title;
   final int step;
-
   const _SectionTitle({required this.title, required this.step});
 
   @override
@@ -524,21 +575,12 @@ class _SectionTitle extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 22,
-          height: 22,
+          width: 22, height: 22,
           decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-          child: Center(
-            child: Text(
-              '$step',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
-            ),
-          ),
+          child: Center(child: Text('$step', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white))),
         ),
         const SizedBox(width: 8),
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-        ),
+        Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
       ],
     );
   }
@@ -566,13 +608,7 @@ class _ValuePreviewCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: AppColors.cardGradient,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6))],
       ),
       child: Row(
         children: [
@@ -580,45 +616,28 @@ class _ValuePreviewCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Collection Preview',
-                  style: TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
-                ),
+                const Text('Collection Preview', style: TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500)),
                 const SizedBox(height: 4),
                 Text(
                   weight > 0 ? '${weight.toStringAsFixed(1)} kg' : 'Enter weight',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.5),
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _PreviewPill(label: cropType),
-                    const SizedBox(width: 6),
-                    _PreviewPill(label: grade),
-                  ],
-                ),
+                Row(children: [
+                  _PreviewPill(label: cropType),
+                  const SizedBox(width: 6),
+                  _PreviewPill(label: grade),
+                ]),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Text(
-                'Est. Value',
-                style: TextStyle(fontSize: 11, color: Colors.white60),
-              ),
+              const Text('Est. Value', style: TextStyle(fontSize: 11, color: Colors.white60)),
               Text(
                 'GHS ${totalValue.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
               ),
             ],
           ),
@@ -636,14 +655,8 @@ class _PreviewPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600),
-      ),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
+      child: Text(label, style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
     );
   }
 }
