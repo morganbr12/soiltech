@@ -1,31 +1,111 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/core/theme/app_colors.dart';
 import '../../../../shared/extensions/extensions.dart';
-import '../../../../shared/models/dummy_data.dart';
+import '../../../../shared/models/enums.dart';
+import '../../../../shared/models/farmer_detail.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/shimmer_loader.dart';
 import '../../../../shared/widgets/status_badge.dart';
+import '../providers/farmers_provider.dart';
 
-class FarmerProfileScreen extends StatelessWidget {
+class FarmerProfileScreen extends ConsumerWidget {
   final String farmerId;
   const FarmerProfileScreen({super.key, required this.farmerId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final farmerAsync = ref.watch(farmerDetailProvider(farmerId));
+
+    return farmerAsync.when(
+      loading: () => const _LoadingScaffold(),
+      error: (e, _) => _ErrorScaffold(error: e.toString(), onRetry: () => ref.invalidate(farmerDetailProvider(farmerId))),
+      data: (farmer) => _ProfileBody(farmer: farmer, farmerId: farmerId),
+    );
+  }
+}
+
+// ─── Loading skeleton ─────────────────────────────────────────────────────────
+
+class _LoadingScaffold extends StatelessWidget {
+  const _LoadingScaffold();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(leading: const BackButton()),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: List.generate(
+            4,
+            (i) => Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: ShimmerBox(width: double.infinity, height: i == 0 ? 200 : 120, radius: 20),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Error scaffold ───────────────────────────────────────────────────────────
+
+class _ErrorScaffold extends StatelessWidget {
+  final String error;
+  final VoidCallback onRetry;
+
+  const _ErrorScaffold({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded), onPressed: () => context.pop()),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.person_off_rounded, size: 56, color: AppColors.primaryLight),
+              const SizedBox(height: 16),
+              const Text('Could not load farmer', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 8),
+              Text(error, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: AppColors.primaryLight)),
+              const SizedBox(height: 24),
+              AppButton(label: 'Retry', icon: Icons.refresh_rounded, onPressed: onRetry),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Full profile body ────────────────────────────────────────────────────────
+
+class _ProfileBody extends StatelessWidget {
+  final FarmerDetail farmer;
+  final String farmerId;
+
+  const _ProfileBody({required this.farmer, required this.farmerId});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final farmer = DummyData.farmers.firstWhere(
-      (f) => f.id == farmerId,
-      orElse: () => DummyData.farmers.first,
-    );
 
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // Hero app bar
+          // ── Hero app bar ────────────────────────────────────────────────────
           SliverAppBar(
-            expandedHeight: 220,
+            expandedHeight: 240,
             pinned: true,
             leading: IconButton(
               onPressed: () => context.pop(),
@@ -39,21 +119,6 @@ class FarmerProfileScreen extends StatelessWidget {
                 child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 16),
               ),
             ),
-            actions: [
-              IconButton(
-                onPressed: () => context.push('/farmers/profile/${farmer.id}/edit'),
-                icon: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.edit_rounded, color: Colors.white, size: 18),
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(gradient: AppColors.heroGradient),
@@ -61,54 +126,72 @@ class FarmerProfileScreen extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 40),
-                      // Avatar
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          gradient: AppColors.cardGradient,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
+                      const SizedBox(height: 48),
+                      // Avatar with KYC badge
+                      Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          Container(
+                            width: 84,
+                            height: 84,
+                            decoration: BoxDecoration(
+                              gradient: AppColors.cardGradient,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            farmer.name.split(' ').map((n) => n[0]).take(2).join(),
-                            style: const TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                            child: Center(
+                              child: Text(
+                                farmer.initials,
+                                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: Colors.white),
+                              ),
                             ),
                           ),
-                        ),
+                          if (farmer.kycVerified)
+                            Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: AppColors.success,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: const Icon(Icons.check, size: 13, color: Colors.white),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        farmer.name,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: -0.3,
-                        ),
+                        farmer.fullName,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
-                        farmer.community,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.white70,
-                        ),
+                        farmer.farmerCode,
+                        style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.75), fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 10),
                       StatusBadge.fromFarmerStatus(farmer.status),
+                      // Rejection reason
+                      if (farmer.status == FarmerStatus.rejected && farmer.rejectionReason != null) ...[
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            'Reason: ${farmer.rejectionReason}',
+                            style: const TextStyle(fontSize: 11, color: Colors.white70),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -121,147 +204,175 @@ class FarmerProfileScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // Stats row
+                  // ── Stats row ──────────────────────────────────────────────
                   Row(
                     children: [
                       _StatCard(
-                        label: 'Total Farms',
-                        value: '${farmer.totalFarms}',
+                        label: 'Farms',
+                        value: '${farmer.farmsCount}',
                         icon: Icons.terrain_rounded,
                       ),
                       const SizedBox(width: 10),
                       _StatCard(
-                        label: 'Acreage',
-                        value: farmer.totalAcreage.acres,
+                        label: 'Farm Size',
+                        value: farmer.totalFarmSize.acres,
                         icon: Icons.straighten_rounded,
                       ),
                       const SizedBox(width: 10),
                       _StatCard(
-                        label: 'Total Sold',
-                        value: '${(farmer.totalCollected / 1000).toStringAsFixed(1)}t',
-                        icon: Icons.scale_rounded,
+                        label: 'Earnings',
+                        value: 'GHS ${farmer.totalEarnings.formatted}',
+                        icon: Icons.payments_rounded,
                       ),
                     ],
                   ).animate().fadeIn(duration: 400.ms),
                   const SizedBox(height: 16),
 
-                  // Personal Info
+                  // ── Wallet balance banner ──────────────────────────────────
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [AppColors.primary, AppColors.primaryDark],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 28),
+                        const SizedBox(width: 14),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Wallet Balance',
+                              style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.8)),
+                            ),
+                            Text(
+                              farmer.walletBalance.currency,
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ).animate(delay: 80.ms).fadeIn(duration: 400.ms),
+                  const SizedBox(height: 16),
+
+                  // ── Personal information ───────────────────────────────────
                   _SectionCard(
                     title: 'Personal Information',
                     isDark: isDark,
                     child: Column(
                       children: [
+                        _InfoRow(icon: Icons.phone_outlined, label: 'Phone', value: farmer.phone),
+                        if (farmer.email != null)
+                          _InfoRow(icon: Icons.email_outlined, label: 'Email', value: farmer.email!),
+                        if (farmer.nationalId != null)
+                          _InfoRow(icon: Icons.badge_outlined, label: 'National ID', value: farmer.nationalId!),
                         _InfoRow(
-                          icon: Icons.badge_outlined,
-                          label: 'National ID',
-                          value: farmer.nationalId,
-                        ),
-                        _InfoRow(
-                          icon: Icons.phone_outlined,
-                          label: 'Phone',
-                          value: farmer.phone,
-                        ),
-                        _InfoRow(
-                          icon: Icons.location_on_outlined,
-                          label: 'Community',
-                          value: farmer.community,
-                        ),
-                        _InfoRow(
-                          icon: Icons.map_outlined,
-                          label: 'District',
-                          value: farmer.district,
-                        ),
-                        _InfoRow(
-                          icon: Icons.place_outlined,
-                          label: 'Region',
-                          value: farmer.region,
+                          icon: Icons.verified_user_rounded,
+                          label: 'KYC Status',
+                          value: farmer.kycVerified ? 'Verified' : 'Not Verified',
+                          valueColor: farmer.kycVerified ? AppColors.success : AppColors.error,
                         ),
                         _InfoRow(
                           icon: Icons.calendar_today_outlined,
-                          label: 'Registered',
-                          value: farmer.registeredDate.displayDate,
+                          label: 'Member Since',
+                          value: farmer.joinedDate.displayDate,
                           isLast: true,
                         ),
                       ],
                     ),
-                  ).animate(delay: 100.ms).fadeIn(duration: 400.ms),
+                  ).animate(delay: 120.ms).fadeIn(duration: 400.ms),
                   const SizedBox(height: 12),
 
-                  // Crops
+                  // ── Location ───────────────────────────────────────────────
                   _SectionCard(
-                    title: 'Crop Portfolio',
-                    isDark: isDark,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: farmer.crops.map((crop) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryContainer.withValues(alpha: 0.4),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: AppColors.primary.withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.grass_rounded, size: 14, color: AppColors.primary),
-                                const SizedBox(width: 6),
-                                Text(
-                                  crop,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ).animate(delay: 200.ms).fadeIn(duration: 400.ms),
-                  const SizedBox(height: 12),
-
-                  // Financial summary
-                  _SectionCard(
-                    title: 'Financial Summary',
+                    title: 'Location',
                     isDark: isDark,
                     child: Column(
                       children: [
-                        _InfoRow(
-                          icon: Icons.scale_rounded,
-                          label: 'Total Produce Sold',
-                          value: farmer.totalCollected.formattedWithUnit,
-                        ),
-                        _InfoRow(
-                          icon: Icons.payments_rounded,
-                          label: 'Estimated Value',
-                          value: (farmer.totalCollected * 16.5).currency,
-                          isLast: true,
-                        ),
+                        _InfoRow(icon: Icons.map_outlined, label: 'Region', value: farmer.region),
+                        _InfoRow(icon: Icons.location_city_outlined, label: 'District', value: farmer.district),
+                        if (farmer.lat != null && farmer.lng != null)
+                          _InfoRow(
+                            icon: Icons.my_location_rounded,
+                            label: 'GPS',
+                            value: '${farmer.lat!.toStringAsFixed(5)}, ${farmer.lng!.toStringAsFixed(5)}',
+                            isLast: true,
+                          )
+                        else
+                          _InfoRow(
+                            icon: Icons.location_off_outlined,
+                            label: 'GPS',
+                            value: 'Not recorded',
+                            valueColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                            isLast: true,
+                          ),
                       ],
                     ),
-                  ).animate(delay: 300.ms).fadeIn(duration: 400.ms),
-                  const SizedBox(height: 20),
+                  ).animate(delay: 160.ms).fadeIn(duration: 400.ms),
+                  const SizedBox(height: 12),
 
-                  // Action buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: AppButton(
-                          label: 'Record Collection',
-                          icon: Icons.agriculture_rounded,
-                          onPressed: () => context.push('/produce/create?farmerId=${farmer.id}'),
+                  // ── Crop portfolio ─────────────────────────────────────────
+                  if (farmer.cropTypes.isNotEmpty)
+                    _SectionCard(
+                      title: 'Crop Portfolio',
+                      isDark: isDark,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: farmer.cropTypes.map((crop) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryContainer.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.grass_rounded, size: 14, color: AppColors.primary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    crop.titleCase,
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
                         ),
                       ),
-                    ],
-                  ).animate(delay: 400.ms).fadeIn(duration: 400.ms),
+                    ).animate(delay: 200.ms).fadeIn(duration: 400.ms),
+                  if (farmer.cropTypes.isNotEmpty) const SizedBox(height: 12),
+
+                  // ── Agent / LBC info ───────────────────────────────────────
+                  _SectionCard(
+                    title: 'Agent & LBC',
+                    isDark: isDark,
+                    child: Column(
+                      children: [
+                        _InfoRow(icon: Icons.person_pin_rounded, label: 'Registered By', value: farmer.agentName),
+                        _InfoRow(icon: Icons.business_rounded, label: 'LBC', value: farmer.lbcName, isLast: true),
+                      ],
+                    ),
+                  ).animate(delay: 240.ms).fadeIn(duration: 400.ms),
+                  const SizedBox(height: 20),
+
+                  // ── Action buttons ─────────────────────────────────────────
+                  AppButton(
+                    label: 'Record Collection',
+                    icon: Icons.agriculture_rounded,
+                    onPressed: () => context.push('/produce/create?farmerId=${farmer.id}'),
+                  ).animate(delay: 280.ms).fadeIn(duration: 400.ms),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -270,8 +381,7 @@ class FarmerProfileScreen extends StatelessWidget {
                           label: 'Register Farm',
                           variant: AppButtonVariant.outline,
                           icon: Icons.terrain_rounded,
-                          onPressed: () =>
-                              context.push('/farmers/farms/register?farmerId=${farmer.id}'),
+                          onPressed: () => context.push('/farmers/farms/register?farmerId=${farmer.id}'),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -284,7 +394,7 @@ class FarmerProfileScreen extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ).animate(delay: 450.ms).fadeIn(duration: 400.ms),
+                  ).animate(delay: 320.ms).fadeIn(duration: 400.ms),
                   const SizedBox(height: 100),
                 ],
               ),
@@ -295,6 +405,8 @@ class FarmerProfileScreen extends StatelessWidget {
     );
   }
 }
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
 
 class _StatCard extends StatelessWidget {
   final String label;
@@ -309,14 +421,11 @@ class _StatCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
         decoration: BoxDecoration(
           color: isDark ? AppColors.cardDark : AppColors.cardLight,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8),
-            width: 1,
-          ),
+          border: Border.all(color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8)),
         ),
         child: Column(
           children: [
@@ -324,16 +433,14 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               value,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 10,
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center,
             ),
           ],
@@ -342,6 +449,8 @@ class _StatCard extends StatelessWidget {
     );
   }
 }
+
+// ─── Section card ─────────────────────────────────────────────────────────────
 
 class _SectionCard extends StatelessWidget {
   final String title;
@@ -358,46 +467,38 @@ class _SectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.cardDark : AppColors.cardLight,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8),
-          width: 1,
-        ),
+        border: Border.all(color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Text(
-              title,
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-            ),
+            child: Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
           ),
-          Divider(
-            height: 1,
-            color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: child,
-          ),
+          Divider(height: 1, color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8)),
+          Padding(padding: const EdgeInsets.all(16), child: child),
         ],
       ),
     );
   }
 }
 
+// ─── Info row ─────────────────────────────────────────────────────────────────
+
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final bool isLast;
+  final Color? valueColor;
 
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
     this.isLast = false,
+    this.valueColor,
   });
 
   @override
@@ -411,17 +512,13 @@ class _InfoRow extends StatelessWidget {
             const SizedBox(width: 10),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 12,
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500),
             ),
             const Spacer(),
             Flexible(
               child: Text(
                 value,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: valueColor),
                 textAlign: TextAlign.end,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -433,9 +530,7 @@ class _InfoRow extends StatelessWidget {
           const SizedBox(height: 12),
           Divider(
             height: 1,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? const Color(0xFF2A3A2A)
-                : const Color(0xFFF0F4F0),
+            color: theme.brightness == Brightness.dark ? const Color(0xFF2A3A2A) : const Color(0xFFF0F4F0),
           ),
           const SizedBox(height: 12),
         ],

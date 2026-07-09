@@ -4,10 +4,13 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../../app/core/theme/app_colors.dart';
-import '../../../../../shared/models/app_models.dart';
+import '../../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../../shared/models/dummy_data.dart';
+import '../../../../../shared/models/product.dart';
 import '../../../../../shared/widgets/product_card.dart';
 import '../../../../../shared/widgets/section_header.dart';
+import '../../../../../shared/widgets/shimmer_loader.dart';
+import '../providers/home_providers.dart';
 
 class CustomerHomeScreen extends ConsumerStatefulWidget {
   const CustomerHomeScreen({super.key});
@@ -18,7 +21,6 @@ class CustomerHomeScreen extends ConsumerStatefulWidget {
 
 class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
   final _searchController = TextEditingController();
-  ProductCategory? _selectedCategory;
   int _bannerPage = 0;
   final _bannerController = PageController();
 
@@ -29,16 +31,17 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
     super.dispose();
   }
 
-  List<Product> get _filteredProducts {
-    if (_selectedCategory == null) return DummyData.products;
-    return DummyData.productsByCategory(_selectedCategory!);
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final customer = DummyData.dummyCustomer;
+
+    final authState = ref.watch(authProvider);
+    final firstName = authState.fullName?.split(' ').first ?? 'there';
+    final cachedImageUrl = authState.profileImageUrl;
+
+    final profileAsync = ref.watch(customerProfileProvider);
+    final selectedCategoryId = ref.watch(selectedCategoryIdProvider);
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
@@ -61,7 +64,6 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 8),
-                      // Top row
                       Row(
                         children: [
                           Expanded(
@@ -85,7 +87,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Good morning, ${customer.fullName.split(' ').first}! 👋',
+                                  'Good morning, $firstName! 👋',
                                   style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w700,
@@ -95,29 +97,46 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                               ],
                             ),
                           ),
-                          Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 22,
-                                backgroundImage: CachedNetworkImageProvider(
-                                  customer.profileImageUrl ?? 'https://i.pravatar.cc/80',
+                          profileAsync.when(
+                            data: (profile) => Stack(
+                              children: [
+                                CircleAvatar(
+                                  radius: 22,
+                                  backgroundImage: profile.profileImageUrl != null
+                                      ? CachedNetworkImageProvider(profile.profileImageUrl!)
+                                      : null,
+                                  backgroundColor: AppColors.primaryContainer,
+                                  child: profile.profileImageUrl == null
+                                      ? Text(
+                                          (profile.fullName.isNotEmpty ? profile.fullName[0] : 'U').toUpperCase(),
+                                          style: const TextStyle(
+                                            color: AppColors.primary,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 16,
+                                          ),
+                                        )
+                                      : null,
                                 ),
-                                backgroundColor: AppColors.primaryContainer,
-                              ),
-                              Positioned(
-                                right: 0,
-                                top: 0,
-                                child: Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.success,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: isDark ? AppColors.backgroundDark : Colors.white, width: 2),
+                                Positioned(
+                                  right: 0,
+                                  top: 0,
+                                  child: Container(
+                                    width: 12,
+                                    height: 12,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.success,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isDark ? AppColors.backgroundDark : Colors.white,
+                                        width: 2,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                            loading: () => _buildAvatar(cachedImageUrl, firstName, isDark),
+                            error: (_, _) => _buildAvatar(cachedImageUrl, firstName, isDark),
                           ),
                         ],
                       ).animate().fadeIn(duration: 400.ms),
@@ -178,26 +197,39 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ─── Categories ────────────────────────────────────────────────
-                SizedBox(
-                  height: 44,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    children: [
-                      _CategoryChip(
-                        label: 'All',
-                        emoji: '🌾',
-                        isSelected: _selectedCategory == null,
-                        onTap: () => setState(() => _selectedCategory = null),
-                      ),
-                      ...ProductCategory.values.map((cat) => _CategoryChip(
-                            label: cat.label,
-                            emoji: cat.emoji,
-                            isSelected: _selectedCategory == cat,
-                            onTap: () => setState(() => _selectedCategory = cat),
-                          )),
-                    ],
+                ref.watch(productCategoriesProvider).when(
+                  data: (categories) => SizedBox(
+                    height: 44,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      children: [
+                        _CategoryChip(
+                          label: 'All',
+                          emoji: '🌾',
+                          isSelected: selectedCategoryId == null,
+                          onTap: () => ref.read(selectedCategoryIdProvider.notifier).state = null,
+                        ),
+                        ...categories.map((cat) => _CategoryChip(
+                              label: cat.name,
+                              emoji: '🌿',
+                              isSelected: selectedCategoryId == cat.id,
+                              onTap: () => ref.read(selectedCategoryIdProvider.notifier).state = cat.id,
+                            )),
+                      ],
+                    ),
                   ),
+                  loading: () => SizedBox(
+                    height: 44,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      itemCount: 5,
+                      separatorBuilder: (_, __) => const SizedBox(width: 10),
+                      itemBuilder: (_, __) => const ShimmerBox(width: 80, height: 36, radius: 12),
+                    ),
+                  ),
+                  error: (_, __) => const SizedBox.shrink(),
                 ).animate(delay: 150.ms).fadeIn(),
 
                 const SizedBox(height: 20),
@@ -208,7 +240,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                   child: Column(
                     children: [
                       SizedBox(
-                        height: 160,
+                        height: 172,
                         child: PageView(
                           controller: _bannerController,
                           onPageChanged: (i) => setState(() => _bannerPage = i),
@@ -225,7 +257,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                               emoji: '🥬',
                             ),
                             _PromoBanner(
-                              title: 'Today\'s Deals',
+                              title: "Today's Deals",
                               subtitle: 'Up to 30% off on\nselected produce',
                               buttonLabel: 'See Deals',
                               gradient: LinearGradient(
@@ -252,16 +284,21 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(3, (i) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          margin: const EdgeInsets.symmetric(horizontal: 3),
-                          width: _bannerPage == i ? 20 : 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: _bannerPage == i ? AppColors.primary : AppColors.primaryLight.withValues(alpha: 0.4),
-                            borderRadius: BorderRadius.circular(3),
+                        children: List.generate(
+                          3,
+                          (i) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: _bannerPage == i ? 20 : 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: _bannerPage == i
+                                  ? AppColors.primary
+                                  : AppColors.primaryLight.withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
                           ),
-                        )),
+                        ),
                       ),
                     ],
                   ),
@@ -282,22 +319,28 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
 
                 const SizedBox(height: 14),
 
-                SizedBox(
-                  height: 280,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: DummyData.dealsProducts.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 14),
-                    itemBuilder: (context, i) {
-                      final p = DummyData.dealsProducts[i];
-                      return ProductCard(
-                        product: p,
-                        onTap: () => context.push('/product/${p.id}'),
-                        onAddToCart: () => _showAddToCartSnackBar(context, p),
-                      );
-                    },
-                  ),
+                ref.watch(dealProductsProvider).when(
+                  data: (products) => products.isEmpty
+                      ? const SizedBox.shrink()
+                      : SizedBox(
+                          height: 280,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            itemCount: products.length,
+                            separatorBuilder: (_, _) => const SizedBox(width: 14),
+                            itemBuilder: (context, i) {
+                              final p = products[i];
+                              return ProductCard(
+                                product: p,
+                                onTap: () => context.push('/product/${p.id}'),
+                                onAddToCart: () => _showAddToCartSnackBar(context, p),
+                              );
+                            },
+                          ),
+                        ),
+                  loading: () => _HorizontalShimmerList(),
+                  error: (_, __) => const SizedBox.shrink(),
                 ),
 
                 const SizedBox(height: 28),
@@ -315,22 +358,28 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
 
                 const SizedBox(height: 14),
 
-                SizedBox(
-                  height: 280,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: _filteredProducts.take(6).length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 14),
-                    itemBuilder: (context, i) {
-                      final p = _filteredProducts[i];
-                      return ProductCard(
-                        product: p,
-                        onTap: () => context.push('/product/${p.id}'),
-                        onAddToCart: () => _showAddToCartSnackBar(context, p),
-                      );
-                    },
-                  ),
+                ref.watch(popularProductsProvider(selectedCategoryId)).when(
+                  data: (products) => products.isEmpty
+                      ? const SizedBox.shrink()
+                      : SizedBox(
+                          height: 280,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            itemCount: products.take(10).length,
+                            separatorBuilder: (_, _) => const SizedBox(width: 14),
+                            itemBuilder: (context, i) {
+                              final p = products[i];
+                              return ProductCard(
+                                product: p,
+                                onTap: () => context.push('/product/${p.id}'),
+                                onAddToCart: () => _showAddToCartSnackBar(context, p),
+                              );
+                            },
+                          ),
+                        ),
+                  loading: () => _HorizontalShimmerList(),
+                  error: (_, __) => const SizedBox.shrink(),
                 ),
 
                 const SizedBox(height: 28),
@@ -383,19 +432,36 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
 
                 const SizedBox(height: 14),
 
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    children: DummyData.featuredProducts.map((p) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: ProductCard(
-                        product: p,
-                        horizontal: true,
-                        onTap: () => context.push('/product/${p.id}'),
-                        onAddToCart: () => _showAddToCartSnackBar(context, p),
+                ref.watch(featuredProductsProvider).when(
+                  data: (products) => products.isEmpty
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            children: products.take(5).map((p) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: ProductCard(
+                                product: p,
+                                horizontal: true,
+                                onTap: () => context.push('/product/${p.id}'),
+                                onAddToCart: () => _showAddToCartSnackBar(context, p),
+                              ),
+                            )).toList(),
+                          ),
+                        ),
+                  loading: () => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      children: List.generate(
+                        3,
+                        (_) => const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: ShimmerBox(width: double.infinity, height: 90, radius: 16),
+                        ),
                       ),
-                    )).toList(),
+                    ),
                   ),
+                  error: (_, __) => const SizedBox.shrink(),
                 ),
 
                 const SizedBox(height: 28),
@@ -413,31 +479,67 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
 
                 const SizedBox(height: 14),
 
-                SizedBox(
-                  height: 280,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: DummyData.products.reversed.take(6).length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 14),
-                    itemBuilder: (context, i) {
-                      final p = DummyData.products.reversed.toList()[i];
-                      return ProductCard(
-                        product: p,
-                        onTap: () => context.push('/product/${p.id}'),
-                        onAddToCart: () => _showAddToCartSnackBar(context, p),
-                      );
-                    },
-                  ),
+                ref.watch(recentProductsProvider).when(
+                  data: (products) => products.isEmpty
+                      ? const SizedBox.shrink()
+                      : SizedBox(
+                          height: 280,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            itemCount: products.length,
+                            separatorBuilder: (_, _) => const SizedBox(width: 14),
+                            itemBuilder: (context, i) {
+                              final p = products[i];
+                              return ProductCard(
+                                product: p,
+                                onTap: () => context.push('/product/${p.id}'),
+                                onAddToCart: () => _showAddToCartSnackBar(context, p),
+                              );
+                            },
+                          ),
+                        ),
+                  loading: () => _HorizontalShimmerList(),
+                  error: (_, __) => const SizedBox.shrink(),
                 ),
 
-                // Bottom padding for floating nav
                 const SizedBox(height: 100),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAvatar(String? imageUrl, String firstName, bool isDark) {
+    return Stack(
+      children: [
+        CircleAvatar(
+          radius: 22,
+          backgroundImage: imageUrl != null ? CachedNetworkImageProvider(imageUrl) : null,
+          backgroundColor: AppColors.primaryContainer,
+          child: imageUrl == null
+              ? Text(
+                  firstName.isNotEmpty ? firstName[0].toUpperCase() : 'U',
+                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 16),
+                )
+              : null,
+        ),
+        Positioned(
+          right: 0,
+          top: 0,
+          child: Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: AppColors.success,
+              shape: BoxShape.circle,
+              border: Border.all(color: isDark ? AppColors.backgroundDark : Colors.white, width: 2),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -456,6 +558,24 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
         duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+}
+
+// ─── Shimmer placeholder for horizontal product lists ──────────────────────
+
+class _HorizontalShimmerList extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 280,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: 4,
+        separatorBuilder: (_, _) => const SizedBox(width: 14),
+        itemBuilder: (_, __) => const ShimmerBox(width: 180, height: 280, radius: 20),
       ),
     );
   }
@@ -492,7 +612,9 @@ class _CategoryChip extends StatelessWidget {
               : (isDark ? AppColors.cardDark : Colors.white),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppColors.primary : (isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE0EAE0)),
+            color: isSelected
+                ? AppColors.primary
+                : (isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE0EAE0)),
             width: 1,
           ),
           boxShadow: isSelected
@@ -544,13 +666,11 @@ class _PromoBanner extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Background pattern
           Positioned(
             right: -20,
             bottom: -20,
             child: Text(emoji, style: const TextStyle(fontSize: 100)),
           ),
-          // Content
           Padding(
             padding: const EdgeInsets.all(24),
             child: Column(

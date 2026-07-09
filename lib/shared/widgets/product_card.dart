@@ -163,7 +163,9 @@ class _ProductCardState extends State<ProductCard> {
                       const SizedBox(width: 4),
                       const Icon(Icons.location_on_outlined, size: 10, color: AppColors.primaryLight),
                       Text(
-                        '${p.distanceKm.toStringAsFixed(1)}km',
+                        p.distanceKm > 0
+                            ? '${p.distanceKm.toStringAsFixed(1)}km'
+                            : p.location.split(',').first.trim(),
                         style: TextStyle(
                           fontSize: 10,
                           color: theme.colorScheme.onSurfaceVariant,

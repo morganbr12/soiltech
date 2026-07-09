@@ -1,7 +1,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const appName = 'SoilTech LBC';
+  static const appName = 'SoilTech LTD';
   static const appVersion = '1.0.0';
 
   static const defaultPadding = 16.0;

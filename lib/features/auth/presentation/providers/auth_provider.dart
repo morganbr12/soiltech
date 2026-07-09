@@ -1,101 +1,153 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../shared/models/app_models.dart';
-import '../../../../shared/models/dummy_data.dart';
+import '../../../../app/core/utils/app_logger.dart';
+import '../../../../shared/models/auth_session.dart';
+import '../../../../shared/models/enums.dart';
+import '../../data/auth_repository.dart';
 
-enum AuthStatus { unauthenticated, authenticating, authenticated, error }
+enum AuthStatus { initial, authenticating, authenticated, unauthenticated, error }
 
-class AuthStateData {
+class AuthState {
   final AuthStatus status;
+  final String? userId;
+  final String? email;
+  final String? fullName;
+  final String? phone;
+  final String? profileImageUrl;
   final UserRole? role;
   final String? error;
 
-  const AuthStateData({
-    this.status = AuthStatus.unauthenticated,
+  const AuthState({
+    this.status = AuthStatus.initial,
+    this.userId,
+    this.email,
+    this.fullName,
+    this.phone,
+    this.profileImageUrl,
     this.role,
     this.error,
   });
 
-  AuthStateData copyWith({AuthStatus? status, UserRole? role, String? error}) {
-    return AuthStateData(
+  AuthState copyWith({
+    AuthStatus? status,
+    String? userId,
+    String? email,
+    String? fullName,
+    String? phone,
+    String? profileImageUrl,
+    UserRole? role,
+    String? error,
+  }) {
+    return AuthState(
       status: status ?? this.status,
+      userId: userId ?? this.userId,
+      email: email ?? this.email,
+      fullName: fullName ?? this.fullName,
+      phone: phone ?? this.phone,
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       role: role ?? this.role,
       error: error ?? this.error,
     );
   }
+
+  bool get isAuthenticated => status == AuthStatus.authenticated;
 }
 
-class CustomerRegistrationData {
-  final String fullName;
-  final String phone;
-  final String email;
-  final String password;
-  final CustomerAccountType accountType;
-  final String location;
+class AuthNotifier extends StateNotifier<AuthState> {
+  final AuthRepository _repo;
 
-  const CustomerRegistrationData({
-    required this.fullName,
-    required this.phone,
-    required this.email,
-    required this.password,
-    required this.accountType,
-    required this.location,
-  });
-}
+  AuthNotifier(this._repo) : super(const AuthState());
 
-class AuthNotifier extends StateNotifier<AuthStateData> {
-  AuthNotifier() : super(const AuthStateData());
+  /// Called from SplashScreen to restore a persisted session.
+  Future<void> restoreSession() async {
+    final session = _repo.getStoredSession();
+    if (session == null) {
+      state = state.copyWith(status: AuthStatus.unauthenticated);
+      return;
+    }
+    state = _sessionToState(session);
+  }
 
-  Future<bool> login(String identifier, String password) async {
+  Future<bool> login(String phone, String password) async {
     state = state.copyWith(status: AuthStatus.authenticating, error: null);
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (identifier.trim().isEmpty || password.length < 6) {
-      state = state.copyWith(status: AuthStatus.error, error: 'Invalid credentials.');
+    try {
+      final session = await _repo.login(phone, password);
+      state = _sessionToState(session);
+      return true;
+    } on DioException catch (e) {
+      final msg = _extractMessage(e) ?? 'Invalid phone number or password';
+      state = state.copyWith(status: AuthStatus.unauthenticated, error: msg);
+      return false;
+    } catch (e, st) {
+      appLogger.e('Login error', error: e, stackTrace: st);
+      state = state.copyWith(status: AuthStatus.unauthenticated, error: e.toString());
       return false;
     }
-
-    final agentPhone = DummyData.agent.phone.replaceAll(' ', '');
-    final inputClean = identifier.replaceAll(' ', '');
-    final isAgent = inputClean == agentPhone ||
-        identifier.trim() == DummyData.agent.phone.trim() ||
-        identifier.trim() == DummyData.agent.email;
-
-    state = state.copyWith(
-      status: AuthStatus.authenticated,
-      role: isAgent ? UserRole.agent : UserRole.customer,
-    );
-    return true;
   }
 
-  Future<bool> register(CustomerRegistrationData data) async {
+  Future<bool> register({
+    required String fullName,
+    required String email,
+    required String phone,
+    required String password,
+    required String accountType,
+    String? address,
+  }) async {
     state = state.copyWith(status: AuthStatus.authenticating, error: null);
-    await Future.delayed(const Duration(seconds: 2));
-    // Simulate registration → auto-login as customer
-    state = state.copyWith(status: AuthStatus.authenticated, role: UserRole.customer);
-    return true;
-  }
-
-  Future<bool> verifyOtp(String otp) async {
-    await Future.delayed(const Duration(seconds: 1));
-    if (otp.length == 6) {
-      state = state.copyWith(status: AuthStatus.authenticated);
+    try {
+      final session = await _repo.register(
+        fullName: fullName,
+        email: email,
+        phone: phone,
+        password: password,
+        accountType: accountType,
+        address: address,
+      );
+      state = _sessionToState(session);
       return true;
+    } on DioException catch (e) {
+      final msg = _extractMessage(e) ?? 'Registration failed. Please try again.';
+      state = state.copyWith(status: AuthStatus.unauthenticated, error: msg);
+      return false;
+    } catch (e, st) {
+      appLogger.e('Register error', error: e, stackTrace: st);
+      state = state.copyWith(status: AuthStatus.unauthenticated, error: e.toString());
+      return false;
     }
-    return false;
   }
 
-  Future<bool> resetPassword(String phone) async {
-    await Future.delayed(const Duration(seconds: 1));
-    return true;
+  Future<void> logout() async {
+    await _repo.logout();
+    state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
-  void logout() {
-    state = const AuthStateData();
+  /// Used by the legacy OtpScreen. Actual password reset goes through ForgotPasswordScreen.
+  Future<bool> verifyOtp(String otp) async => false;
+
+  AuthState _sessionToState(AuthSession session) {
+    final role = session.role == 'customer' ? UserRole.customer : UserRole.agent;
+    return AuthState(
+      status: AuthStatus.authenticated,
+      userId: session.userId,
+      email: session.email,
+      fullName: session.fullName,
+      phone: session.phone,
+      profileImageUrl: session.profileImageUrl,
+      role: role,
+    );
+  }
+
+  String? _extractMessage(DioException e) {
+    try {
+      final data = e.response?.data;
+      if (data is Map) return data['message'] as String?;
+    } catch (_) {}
+    return null;
   }
 }
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthStateData>(
-  (ref) => AuthNotifier(),
+final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
+  (ref) => AuthNotifier(ref.read(authRepositoryProvider)),
 );
 
 final isAuthenticatedProvider = Provider<bool>((ref) {

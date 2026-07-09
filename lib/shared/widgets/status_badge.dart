@@ -113,18 +113,18 @@ class StatusBadge extends StatelessWidget {
 
   factory StatusBadge.fromFarmerStatus(FarmerStatus status) {
     return switch (status) {
-      FarmerStatus.active => const StatusBadge(
-          label: 'Active',
+      FarmerStatus.approved => const StatusBadge(
+          label: 'Approved',
           color: AppColors.successLight,
           textColor: AppColors.success,
         ),
-      FarmerStatus.inactive => const StatusBadge(
-          label: 'Inactive',
-          color: Color(0xFFEEEEEE),
-          textColor: Color(0xFF666666),
+      FarmerStatus.pending => const StatusBadge(
+          label: 'Pending',
+          color: Color(0xFFFFF3E0),
+          textColor: Color(0xFFE65100),
         ),
-      FarmerStatus.suspended => const StatusBadge(
-          label: 'Suspended',
+      FarmerStatus.rejected => const StatusBadge(
+          label: 'Rejected',
           color: AppColors.errorLight,
           textColor: AppColors.error,
         ),

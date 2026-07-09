@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../../app/core/theme/app_colors.dart';
 import '../../../../../shared/models/app_models.dart';
@@ -9,17 +10,18 @@ import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/rating_widget.dart';
 import '../../../../../shared/widgets/section_header.dart';
 import '../../../../../shared/widgets/product_card.dart';
+import '../../../orders/presentation/providers/orders_provider.dart';
 
-class ProductDetailScreen extends StatefulWidget {
+class ProductDetailScreen extends ConsumerStatefulWidget {
   final String productId;
 
   const ProductDetailScreen({super.key, required this.productId});
 
   @override
-  State<ProductDetailScreen> createState() => _ProductDetailScreenState();
+  ConsumerState<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
 
-class _ProductDetailScreenState extends State<ProductDetailScreen> {
+class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   late Product? _product;
   int _galleryIndex = 0;
   double _quantity = 1.0;
@@ -540,11 +542,131 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             Expanded(
               child: AppButton(
                 label: 'Buy Now  GHS ${total.toStringAsFixed(0)}',
-                onPressed: () {},
+                onPressed: () => _showPlaceOrderSheet(context, p),
                 icon: Icons.bolt_rounded,
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showPlaceOrderSheet(BuildContext context, Product p) {
+    final addressCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).brightness == Brightness.dark ? AppColors.cardDark : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: StatefulBuilder(
+            builder: (ctx, setModalState) {
+              final orderState = ref.watch(placeOrderProvider);
+              final isLoading = orderState is AsyncLoading;
+
+              return Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36, height: 4,
+                        decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('Place Order', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${p.name} · ${_quantity.toStringAsFixed(1)} ${p.unit} · GHS ${(_quantity * p.pricePerUnit).toStringAsFixed(2)}',
+                      style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      controller: addressCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Delivery Address',
+                        prefixIcon: const Icon(Icons.location_on_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      maxLines: 2,
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter delivery address' : null,
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: notesCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Notes (optional)',
+                        prefixIcon: const Icon(Icons.notes_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: isLoading
+                            ? null
+                            : () async {
+                                if (!formKey.currentState!.validate()) return;
+                                final success = await ref.read(placeOrderProvider.notifier).placeOrder(
+                                  deliveryAddress: addressCtrl.text.trim(),
+                                  productId: p.id,
+                                  quantity: _quantity.round(),
+                                  notes: notesCtrl.text.trim(),
+                                );
+                                if (!context.mounted) return;
+                                Navigator.of(ctx).pop();
+                                if (success) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text('Order placed successfully!'),
+                                      backgroundColor: AppColors.success,
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                    ),
+                                  );
+                                } else {
+                                  final err = ref.read(placeOrderProvider);
+                                  final msg = err is AsyncError ? err.error.toString() : 'Order failed. Try again.';
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(msg),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                    ),
+                                  );
+                                }
+                              },
+                        icon: isLoading
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.check_rounded),
+                        label: Text(isLoading ? 'Placing Order...' : 'Confirm Order'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

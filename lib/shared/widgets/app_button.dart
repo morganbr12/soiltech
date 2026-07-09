@@ -218,13 +218,17 @@ class _IdleContent extends StatelessWidget {
           Icon(icon, size: 20, color: foregroundColor),
           const SizedBox(width: 8),
         ],
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: fontSize ?? 15,
-            fontWeight: FontWeight.w600,
-            color: foregroundColor,
-            letterSpacing: 0.1,
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: fontSize ?? 15,
+              fontWeight: FontWeight.w600,
+              color: foregroundColor,
+              letterSpacing: 0.1,
+            ),
           ),
         ),
       ],

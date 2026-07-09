@@ -1,59 +1,66 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/core/theme/app_colors.dart';
-import '../../../../shared/models/app_models.dart';
-import '../../../../shared/models/dummy_data.dart';
+import '../../../../shared/models/agent_farmer.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../../../shared/widgets/offline_banner.dart';
 import '../../../../shared/widgets/shimmer_loader.dart';
 import '../../../../shared/widgets/status_badge.dart';
+import '../providers/farmers_provider.dart';
 
-class FarmersListScreen extends StatefulWidget {
+class FarmersListScreen extends ConsumerStatefulWidget {
   const FarmersListScreen({super.key});
 
   @override
-  State<FarmersListScreen> createState() => _FarmersListScreenState();
+  ConsumerState<FarmersListScreen> createState() => _FarmersListScreenState();
 }
 
-class _FarmersListScreenState extends State<FarmersListScreen> {
+class _FarmersListScreenState extends ConsumerState<FarmersListScreen> {
   final _searchController = TextEditingController();
-  String _searchQuery = '';
-  FarmerStatus? _statusFilter;
-  bool _isLoading = true;
-
-  List<FarmerModel> get _filtered {
-    var list = DummyData.farmers;
-    if (_searchQuery.isNotEmpty) {
-      list = list.where((f) =>
-          f.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          f.phone.contains(_searchQuery) ||
-          f.community.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
-    }
-    if (_statusFilter != null) {
-      list = list.where((f) => f.status == _statusFilter).toList();
-    }
-    return list;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) setState(() => _isLoading = false);
-    });
-  }
+  Timer? _debounce;
 
   @override
   void dispose() {
     _searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
+  }
+
+  void _onSearchChanged(String q) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      ref.read(farmersFilterProvider.notifier).update((s) => s.copyWith(search: q, page: 1));
+    });
+  }
+
+  Future<void> _refresh() async {
+    ref.invalidate(farmersListProvider);
+    try {
+      await ref.read(farmersListProvider.future);
+    } catch (_) {}
+  }
+
+  void _onStatusSelected(String? status) {
+    final current = ref.read(farmersFilterProvider).status;
+    // Tapping the same chip toggles it off
+    final next = current == status ? null : status;
+    ref.read(farmersFilterProvider.notifier).update((s) => s.copyWith(
+          status: next,
+          clearStatus: next == null,
+          page: 1,
+        ));
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final filter = ref.watch(farmersFilterProvider);
+    final farmersAsync = ref.watch(farmersListProvider);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -77,17 +84,21 @@ class _FarmersListScreenState extends State<FarmersListScreen> {
       ),
       body: Column(
         children: [
-          // Search + filters
+          // ── Search + filters ────────────────────────────────────────────────
           Container(
             color: theme.scaffoldBackgroundColor,
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: Column(
               children: [
                 AppSearchField(
-                  hint: 'Search by name, phone, or community...',
+                  hint: 'Search by name, phone, or code...',
                   controller: _searchController,
-                  onChanged: (q) => setState(() => _searchQuery = q),
-                  onClear: () => setState(() => _searchQuery = ''),
+                  onChanged: _onSearchChanged,
+                  onClear: () {
+                    _searchController.clear();
+                    ref.read(farmersFilterProvider.notifier)
+                        .update((s) => s.copyWith(search: '', page: 1));
+                  },
                 ),
                 const SizedBox(height: 10),
                 SingleChildScrollView(
@@ -96,30 +107,29 @@ class _FarmersListScreenState extends State<FarmersListScreen> {
                     children: [
                       _FilterChip(
                         label: 'All',
-                        isSelected: _statusFilter == null,
-                        onTap: () => setState(() => _statusFilter = null),
+                        isSelected: filter.status == null,
+                        onTap: () => _onStatusSelected(null),
                       ),
                       const SizedBox(width: 8),
                       _FilterChip(
-                        label: 'Active',
-                        isSelected: _statusFilter == FarmerStatus.active,
-                        onTap: () => setState(
-                          () => _statusFilter = _statusFilter == FarmerStatus.active
-                              ? null
-                              : FarmerStatus.active,
-                        ),
+                        label: 'Approved',
+                        isSelected: filter.status == 'APPROVED',
+                        onTap: () => _onStatusSelected('APPROVED'),
                         color: AppColors.success,
                       ),
                       const SizedBox(width: 8),
                       _FilterChip(
-                        label: 'Inactive',
-                        isSelected: _statusFilter == FarmerStatus.inactive,
-                        onTap: () => setState(
-                          () => _statusFilter = _statusFilter == FarmerStatus.inactive
-                              ? null
-                              : FarmerStatus.inactive,
-                        ),
-                        color: Colors.grey,
+                        label: 'Pending',
+                        isSelected: filter.status == 'PENDING',
+                        onTap: () => _onStatusSelected('PENDING'),
+                        color: const Color(0xFFE65100),
+                      ),
+                      const SizedBox(width: 8),
+                      _FilterChip(
+                        label: 'Rejected',
+                        isSelected: filter.status == 'REJECTED',
+                        onTap: () => _onStatusSelected('REJECTED'),
+                        color: AppColors.error,
                       ),
                     ],
                   ),
@@ -128,59 +138,106 @@ class _FarmersListScreenState extends State<FarmersListScreen> {
             ),
           ),
 
-          // Count & sort
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Text(
-                  '${_filtered.length} farmers',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
+          // ── Count row ───────────────────────────────────────────────────────
+          farmersAsync.whenData((result) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    Text(
+                      '${result.total} farmers',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(Icons.sort_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(
+                      'A–Z',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                Icon(Icons.sort_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Text(
-                  'Name A–Z',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
+              )).valueOrNull ??
+              const SizedBox.shrink(),
 
-          // List
+          // ── List ────────────────────────────────────────────────────────────
           Expanded(
-            child: _isLoading
-                ? const ShimmerList()
-                : _filtered.isEmpty
-                    ? AppEmptyState(
-                        icon: Icons.people_outline_rounded,
-                        title: 'No Farmers Found',
-                        subtitle: _searchQuery.isNotEmpty
-                            ? 'Try a different search term'
-                            : 'Register your first farmer',
-                        actionLabel: 'Register Farmer',
-                        onAction: () => context.push('/farmers/register'),
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              color: AppColors.primary,
+              child: farmersAsync.when(
+                loading: () => const ShimmerList(),
+                error: (e, _) => SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: SizedBox(
+                    height: MediaQuery.sizeOf(context).height * 0.6,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.cloud_off_rounded, size: 52, color: AppColors.primaryLight),
+                            const SizedBox(height: 16),
+                            const Text('Could not load farmers',
+                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                            const SizedBox(height: 8),
+                            Text(e.toString(),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
+                            const SizedBox(height: 20),
+                            FilledButton.icon(
+                              onPressed: _refresh,
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text('Retry'),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Pull down to refresh',
+                              style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                data: (result) => result.farmers.isEmpty
+                    ? SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: MediaQuery.sizeOf(context).height * 0.6,
+                          child: AppEmptyState(
+                            icon: Icons.people_outline_rounded,
+                            title: 'No Farmers Found',
+                            subtitle: filter.search.isNotEmpty
+                                ? 'Try a different search term'
+                                : filter.status != null
+                                    ? 'No ${filter.status!.toLowerCase()} farmers yet'
+                                    : 'Pull down to refresh or register your first farmer',
+                            actionLabel: 'Register Farmer',
+                            onAction: () => context.push('/farmers/register'),
+                          ),
+                        ),
                       )
                     : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                        itemCount: _filtered.length,
-                        itemBuilder: (_, i) {
-                          final farmer = _filtered[i];
-                          return _FarmerCard(
-                            farmer: farmer,
-                            isDark: isDark,
-                            index: i,
-                            onTap: () => context.push('/farmers/profile/${farmer.id}'),
-                          );
-                        },
+                        itemCount: result.farmers.length,
+                        itemBuilder: (_, i) => _FarmerCard(
+                          farmer: result.farmers[i],
+                          isDark: isDark,
+                          index: i,
+                          onTap: () => context.push('/farmers/profile/${result.farmers[i].id}'),
+                        ),
                       ),
+              ),
+            ),
           ),
         ],
       ),
@@ -188,18 +245,15 @@ class _FarmersListScreenState extends State<FarmersListScreen> {
   }
 }
 
+// ─── Filter chip ──────────────────────────────────────────────────────────────
+
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
   final Color? color;
 
-  const _FilterChip({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-    this.color,
-  });
+  const _FilterChip({required this.label, required this.isSelected, required this.onTap, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -234,8 +288,10 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
+// ─── Farmer card ──────────────────────────────────────────────────────────────
+
 class _FarmerCard extends StatelessWidget {
-  final FarmerModel farmer;
+  final AgentFarmer farmer;
   final bool isDark;
   final int index;
   final VoidCallback onTap;
@@ -260,7 +316,6 @@ class _FarmerCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isDark ? const Color(0xFF2A3A2A) : const Color(0xFFE8F0E8),
-            width: 1,
           ),
           boxShadow: [
             BoxShadow(
@@ -284,7 +339,7 @@ class _FarmerCard extends StatelessWidget {
                   ),
                   child: Center(
                     child: Text(
-                      farmer.name.split(' ').map((n) => n[0]).take(2).join(),
+                      farmer.initials,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -293,28 +348,28 @@ class _FarmerCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (farmer.syncStatus != SyncStatus.synced)
+                if (farmer.kycVerified)
                   Positioned(
                     right: 0,
                     bottom: 0,
                     child: Container(
-                      width: 14,
-                      height: 14,
+                      width: 16,
+                      height: 16,
                       decoration: BoxDecoration(
-                        color: farmer.syncStatus == SyncStatus.pending
-                            ? AppColors.warning
-                            : AppColors.error,
+                        color: AppColors.success,
                         shape: BoxShape.circle,
                         border: Border.all(
                           color: isDark ? AppColors.cardDark : AppColors.cardLight,
                           width: 1.5,
                         ),
                       ),
+                      child: const Icon(Icons.check, size: 10, color: Colors.white),
                     ),
                   ),
               ],
             ),
             const SizedBox(width: 12),
+
             // Info
             Expanded(
               child: Column(
@@ -324,11 +379,8 @@ class _FarmerCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          farmer.name,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          farmer.fullName,
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -337,80 +389,54 @@ class _FarmerCard extends StatelessWidget {
                       StatusBadge.fromFarmerStatus(farmer.status),
                     ],
                   ),
+                  const SizedBox(height: 3),
+                  Text(
+                    farmer.farmerCode,
+                    style: TextStyle(fontSize: 11, color: AppColors.primary.withValues(alpha: 0.8), fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Icon(Icons.location_on_outlined, size: 12,
-                          color: theme.colorScheme.onSurfaceVariant),
+                      Icon(Icons.location_on_outlined, size: 12, color: theme.colorScheme.onSurfaceVariant),
                       const SizedBox(width: 3),
                       Expanded(
                         child: Text(
-                          '${farmer.community}, ${farmer.district}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                          '${farmer.district}, ${farmer.region}',
+                          style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _InfoPill(
-                        icon: Icons.terrain_outlined,
-                        label: '${farmer.totalFarms} farms',
-                      ),
-                      const SizedBox(width: 8),
-                      _InfoPill(
-                        icon: Icons.grass_rounded,
-                        label: farmer.crops.take(2).join(', '),
-                      ),
-                    ],
-                  ),
+                  if (farmer.cropTypes.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.grass_rounded, size: 12, color: AppColors.primary.withValues(alpha: 0.7)),
+                        const SizedBox(width: 3),
+                        Text(
+                          farmer.cropTypes.take(3).join(', '),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.primary.withValues(alpha: 0.8),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
-            // Arrow
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 14,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+
+            Icon(Icons.arrow_forward_ios_rounded, size: 14, color: theme.colorScheme.onSurfaceVariant),
           ],
         ),
       )
-          .animate(delay: Duration(milliseconds: 50 * index))
+          .animate(delay: Duration(milliseconds: 40 * index))
           .fadeIn(duration: 300.ms)
           .slideX(begin: 0.05, end: 0),
-    );
-  }
-}
-
-class _InfoPill extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _InfoPill({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 12, color: AppColors.primary.withValues(alpha: 0.7)),
-        const SizedBox(width: 3),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: AppColors.primary.withValues(alpha: 0.8),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }

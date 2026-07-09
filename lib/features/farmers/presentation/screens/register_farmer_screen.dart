@@ -1,67 +1,120 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/core/constants/app_constants.dart';
 import '../../../../app/core/theme/app_colors.dart';
+import '../../../../app/core/utils/app_logger.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
+import '../../data/farmers_repository.dart';
+import '../providers/farmers_provider.dart';
 
-class RegisterFarmerScreen extends StatefulWidget {
+class RegisterFarmerScreen extends ConsumerStatefulWidget {
   const RegisterFarmerScreen({super.key});
 
   @override
-  State<RegisterFarmerScreen> createState() => _RegisterFarmerScreenState();
+  ConsumerState<RegisterFarmerScreen> createState() => _RegisterFarmerScreenState();
 }
 
-class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
+class _RegisterFarmerScreenState extends ConsumerState<RegisterFarmerScreen> {
   final _formKey = GlobalKey<FormState>();
   int _currentStep = 0;
   bool _isLoading = false;
+  String? _errorMessage;
 
-  // Personal details
-  final _nameController = TextEditingController();
+  // Step 1 — Personal details
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _idController = TextEditingController();
   final _emailController = TextEditingController();
+  final _nationalIdController = TextEditingController();
 
-  // Location
+  // Step 2 — Location
   String? _selectedRegion;
   final _districtController = TextEditingController();
-  final _communityController = TextEditingController();
 
-  // Crops
+  // Step 3 — Crops
   final Set<String> _selectedCrops = {};
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _phoneController.dispose();
-    _idController.dispose();
     _emailController.dispose();
+    _nationalIdController.dispose();
     _districtController.dispose();
-    _communityController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Farmer registered successfully!'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-      context.pop();
+    setState(() { _isLoading = true; _errorMessage = null; });
+
+    try {
+      final body = <String, dynamic>{
+        'firstName': _firstNameController.text.trim(),
+        'lastName': _lastNameController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'region': _selectedRegion!,
+        'district': _districtController.text.trim(),
+        if (_emailController.text.trim().isNotEmpty)
+          'email': _emailController.text.trim(),
+        if (_nationalIdController.text.trim().isNotEmpty)
+          'nationalId': _nationalIdController.text.trim(),
+        if (_selectedCrops.isNotEmpty)
+          'cropTypes': _selectedCrops.map((c) => c.toLowerCase()).toList(),
+      };
+
+      await ref.read(farmersRepositoryProvider).createFarmer(body);
+
+      // Refresh the farmers list so the new entry appears immediately
+      ref.invalidate(farmersListProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${_firstNameController.text.trim()} ${_lastNameController.text.trim()} registered successfully!',
+            ),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        context.pop();
+      }
+    } catch (e, st) {
+      appLogger.e('Register farmer failed', error: e, stackTrace: st);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = _parseError(e);
+        });
+      }
+      return;
+    }
+
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  String _parseError(Object e) {
+    final msg = e.toString();
+    if (msg.contains('400')) return 'Invalid details. Please check the form and try again.';
+    if (msg.contains('409')) return 'A farmer with this phone number already exists.';
+    if (msg.contains('SocketException') || msg.contains('connection')) return 'No internet connection.';
+    return 'Registration failed. Please try again.';
+  }
+
+  void _nextStep() {
+    if (_formKey.currentState?.validate() ?? false) {
+      setState(() { _currentStep++; _errorMessage = null; });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    const steps = ['Personal Details', 'Location', 'Crop Portfolio'];
 
     return Scaffold(
       appBar: AppBar(
@@ -74,7 +127,7 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
         actions: [
           if (_currentStep > 0)
             TextButton(
-              onPressed: () => setState(() => _currentStep--),
+              onPressed: () => setState(() { _currentStep--; _errorMessage = null; }),
               child: const Text('Back'),
             ),
         ],
@@ -94,20 +147,12 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
               children: [
                 Text(
                   'Step ${_currentStep + 1} of 3',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const Spacer(),
                 Text(
-                  ['Personal Details', 'Location', 'Crop Portfolio'][_currentStep],
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
-                  ),
+                  steps[_currentStep],
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
                 ),
               ],
             ),
@@ -121,10 +166,7 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
                 transitionBuilder: (child, anim) => FadeTransition(
                   opacity: anim,
                   child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0.05, 0),
-                      end: Offset.zero,
-                    ).animate(anim),
+                    position: Tween<Offset>(begin: const Offset(0.05, 0), end: Offset.zero).animate(anim),
                     child: child,
                   ),
                 ),
@@ -133,21 +175,37 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
             ),
           ),
 
+          // Error banner
+          if (_errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.errorLight,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, size: 16, color: AppColors.error),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(fontSize: 13, color: AppColors.error, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate().shake(duration: 400.ms),
+            ),
+
           // Bottom button
           Padding(
-            padding: EdgeInsets.fromLTRB(
-              20, 12, 20, MediaQuery.of(context).padding.bottom + 16,
-            ),
+            padding: EdgeInsets.fromLTRB(20, 8, 20, MediaQuery.of(context).padding.bottom + 16),
             child: _currentStep < 2
-                ? AppButton(
-                    label: 'Continue',
-                    icon: Icons.arrow_forward_rounded,
-                    onPressed: () {
-                      if (_formKey.currentState?.validate() ?? false) {
-                        setState(() => _currentStep++);
-                      }
-                    },
-                  )
+                ? AppButton(label: 'Continue', icon: Icons.arrow_forward_rounded, onPressed: _nextStep)
                 : AppButton(
                     label: 'Register Farmer',
                     icon: Icons.person_add_rounded,
@@ -161,15 +219,14 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
   }
 
   Widget _buildStep(ThemeData theme) {
-    switch (_currentStep) {
-      case 0:
-        return _buildPersonalStep(theme);
-      case 1:
-        return _buildLocationStep(theme);
-      default:
-        return _buildCropStep(theme);
-    }
+    return switch (_currentStep) {
+      0 => _buildPersonalStep(theme),
+      1 => _buildLocationStep(theme),
+      _ => _buildCropStep(theme),
+    };
   }
+
+  // ── Step 1: Personal details ─────────────────────────────────────────────────
 
   Widget _buildPersonalStep(ThemeData theme) {
     return SingleChildScrollView(
@@ -178,24 +235,39 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Personal Details',
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-          ).animate().fadeIn(duration: 300.ms),
+          Text('Personal Details', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))
+              .animate().fadeIn(duration: 300.ms),
           const SizedBox(height: 4),
-          Text(
-            'Enter the farmer\'s personal information.',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ).animate().fadeIn(duration: 300.ms),
+          Text('Enter the farmer\'s personal information.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant))
+              .animate().fadeIn(duration: 300.ms),
           const SizedBox(height: 24),
-          AppTextField(
-            label: 'Full Name',
-            hint: 'e.g. Kofi Mensah',
-            controller: _nameController,
-            prefixIcon: Icons.person_outline_rounded,
-            textCapitalization: TextCapitalization.words,
-            validator: (v) => v?.isEmpty == true ? 'Full name required' : null,
-          ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
+          Row(
+            children: [
+              Expanded(
+                child: AppTextField(
+                  label: 'First Name',
+                  hint: 'e.g. Kofi',
+                  controller: _firstNameController,
+                  prefixIcon: Icons.person_outline_rounded,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  validator: (v) => v?.trim().isEmpty == true ? 'Required' : null,
+                ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: AppTextField(
+                  label: 'Last Name',
+                  hint: 'e.g. Mensah',
+                  controller: _lastNameController,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  validator: (v) => v?.trim().isEmpty == true ? 'Required' : null,
+                ).animate(delay: 130.ms).fadeIn(duration: 300.ms),
+              ),
+            ],
+          ),
           const SizedBox(height: 14),
           AppTextField(
             label: 'Phone Number',
@@ -203,17 +275,18 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
             controller: _phoneController,
             keyboardType: TextInputType.phone,
             prefixIcon: Icons.phone_outlined,
-            validator: (v) => v?.isEmpty == true ? 'Phone number required' : null,
-          ).animate(delay: 150.ms).fadeIn(duration: 300.ms),
+            textInputAction: TextInputAction.next,
+            validator: (v) => v?.trim().isEmpty == true ? 'Phone number required' : null,
+          ).animate(delay: 160.ms).fadeIn(duration: 300.ms),
           const SizedBox(height: 14),
           AppTextField(
-            label: 'National ID Number',
+            label: 'National ID (Optional)',
             hint: 'GHA-XXXXXXXX-X',
-            controller: _idController,
+            controller: _nationalIdController,
             prefixIcon: Icons.badge_outlined,
             textCapitalization: TextCapitalization.characters,
-            validator: (v) => v?.isEmpty == true ? 'National ID required' : null,
-          ).animate(delay: 200.ms).fadeIn(duration: 300.ms),
+            textInputAction: TextInputAction.next,
+          ).animate(delay: 190.ms).fadeIn(duration: 300.ms),
           const SizedBox(height: 14),
           AppTextField(
             label: 'Email (Optional)',
@@ -221,43 +294,34 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             prefixIcon: Icons.email_outlined,
-          ).animate(delay: 250.ms).fadeIn(duration: 300.ms),
+            textInputAction: TextInputAction.done,
+          ).animate(delay: 220.ms).fadeIn(duration: 300.ms),
           const SizedBox(height: 24),
-          // Photo capture placeholder
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: AppColors.primaryContainer.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.3),
-                style: BorderStyle.solid,
-              ),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
             ),
             child: Column(
               children: [
                 const Icon(Icons.add_a_photo_outlined, size: 32, color: AppColors.primary),
                 const SizedBox(height: 8),
-                const Text(
-                  'Capture Farmer Photo',
-                  style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.primary),
-                ),
+                const Text('Capture Farmer Photo', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.primary)),
                 const SizedBox(height: 4),
-                Text(
-                  'Take a photo for identification',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.primary.withValues(alpha: 0.7),
-                  ),
-                ),
+                Text('Take a photo for identification',
+                    style: TextStyle(fontSize: 12, color: AppColors.primary.withValues(alpha: 0.7))),
               ],
             ),
-          ).animate(delay: 300.ms).fadeIn(duration: 300.ms),
+          ).animate(delay: 250.ms).fadeIn(duration: 300.ms),
         ],
       ),
     );
   }
+
+  // ── Step 2: Location ─────────────────────────────────────────────────────────
 
   Widget _buildLocationStep(ThemeData theme) {
     return SingleChildScrollView(
@@ -266,38 +330,25 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Location Details',
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-          ).animate().fadeIn(duration: 300.ms),
+          Text('Location Details', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))
+              .animate().fadeIn(duration: 300.ms),
           const SizedBox(height: 4),
-          Text(
-            'Where is the farmer located?',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ).animate().fadeIn(duration: 300.ms),
+          Text('Where is the farmer located?',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant))
+              .animate().fadeIn(duration: 300.ms),
           const SizedBox(height: 24),
-
-          // Region dropdown
           DropdownButtonFormField<String>(
             value: _selectedRegion,
             decoration: InputDecoration(
               labelText: 'Region',
               prefixIcon: const Icon(Icons.map_outlined, size: 20),
               filled: true,
-              fillColor: theme.brightness == Brightness.dark
-                  ? const Color(0xFF1E2E20)
-                  : const Color(0xFFF0F6F1),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
+              fillColor: theme.brightness == Brightness.dark ? const Color(0xFF1E2E20) : const Color(0xFFF0F6F1),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide(
-                  color: theme.brightness == Brightness.dark
-                      ? const Color(0xFF2A3A2A)
-                      : const Color(0xFFD4E4D4),
-                  width: 1,
+                  color: theme.brightness == Brightness.dark ? const Color(0xFF2A3A2A) : const Color(0xFFD4E4D4),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
@@ -305,9 +356,9 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
                 borderSide: const BorderSide(color: AppColors.primary, width: 2),
               ),
             ),
-            items: AppConstants.regions.map((r) {
-              return DropdownMenuItem(value: r, child: Text(r, style: const TextStyle(fontSize: 14)));
-            }).toList(),
+            items: AppConstants.regions
+                .map((r) => DropdownMenuItem(value: r, child: Text(r, style: const TextStyle(fontSize: 14))))
+                .toList(),
             onChanged: (v) => setState(() => _selectedRegion = v),
             validator: (v) => v == null ? 'Please select a region' : null,
           ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
@@ -318,21 +369,14 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
             controller: _districtController,
             prefixIcon: Icons.location_city_outlined,
             textCapitalization: TextCapitalization.words,
-            validator: (v) => v?.isEmpty == true ? 'District required' : null,
+            validator: (v) => v?.trim().isEmpty == true ? 'District required' : null,
           ).animate(delay: 150.ms).fadeIn(duration: 300.ms),
-          const SizedBox(height: 14),
-          AppTextField(
-            label: 'Community / Village',
-            hint: 'e.g. Ejisu',
-            controller: _communityController,
-            prefixIcon: Icons.home_outlined,
-            textCapitalization: TextCapitalization.words,
-            validator: (v) => v?.isEmpty == true ? 'Community required' : null,
-          ).animate(delay: 200.ms).fadeIn(duration: 300.ms),
         ],
       ),
     );
   }
+
+  // ── Step 3: Crops ────────────────────────────────────────────────────────────
 
   Widget _buildCropStep(ThemeData theme) {
     return SingleChildScrollView(
@@ -341,16 +385,17 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Crop Portfolio',
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-          ).animate().fadeIn(duration: 300.ms),
+          Text('Crop Portfolio', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))
+              .animate().fadeIn(duration: 300.ms),
           const SizedBox(height: 4),
-          Text(
-            'Select all crops the farmer cultivates.',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ).animate().fadeIn(duration: 300.ms),
-          const SizedBox(height: 24),
+          Text('Select all crops the farmer cultivates.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant))
+              .animate().fadeIn(duration: 300.ms),
+          const SizedBox(height: 4),
+          Text('Optional — you can skip this step.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic))
+              .animate().fadeIn(duration: 300.ms),
+          const SizedBox(height: 20),
           Wrap(
             spacing: 10,
             runSpacing: 10,
@@ -358,13 +403,7 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
               final crop = e.value;
               final isSelected = _selectedCrops.contains(crop);
               return GestureDetector(
-                onTap: () => setState(() {
-                  if (isSelected) {
-                    _selectedCrops.remove(crop);
-                  } else {
-                    _selectedCrops.add(crop);
-                  }
-                }),
+                onTap: () => setState(() => isSelected ? _selectedCrops.remove(crop) : _selectedCrops.add(crop)),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -383,11 +422,7 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.grass_rounded,
-                        size: 16,
-                        color: isSelected ? Colors.white : AppColors.primary,
-                      ),
+                      Icon(Icons.grass_rounded, size: 16, color: isSelected ? Colors.white : AppColors.primary),
                       const SizedBox(width: 6),
                       Text(
                         crop,
@@ -407,21 +442,14 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
           if (_selectedCrops.isNotEmpty)
             Container(
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.successLight,
-                borderRadius: BorderRadius.circular(12),
-              ),
+              decoration: BoxDecoration(color: AppColors.successLight, borderRadius: BorderRadius.circular(12)),
               child: Row(
                 children: [
                   const Icon(Icons.check_circle_rounded, size: 16, color: AppColors.success),
                   const SizedBox(width: 8),
                   Text(
                     '${_selectedCrops.length} crop${_selectedCrops.length > 1 ? 's' : ''} selected',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.success,
-                    ),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.success),
                   ),
                 ],
               ),

@@ -1,31 +1,50 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/core/theme/app_colors.dart';
+import '../../../../shared/models/enums.dart';
+import '../providers/auth_provider.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProviderStateMixin {
   late AnimationController _progressController;
 
   @override
   void initState() {
     super.initState();
     final splashDuration = kDebugMode ? const Duration(milliseconds: 400) : const Duration(seconds: 3);
-    _progressController = AnimationController(
-      vsync: this,
-      duration: splashDuration,
-    )..forward();
+    _progressController = AnimationController(vsync: this, duration: splashDuration)..forward();
 
-    Future.delayed(kDebugMode ? const Duration(milliseconds: 450) : const Duration(milliseconds: 3200), () {
-      if (mounted) context.go('/login');
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+  }
+
+  Future<void> _init() async {
+    final minWait = kDebugMode
+        ? const Duration(milliseconds: 450)
+        : const Duration(milliseconds: 3200);
+
+    await Future.wait([
+      Future.delayed(minWait),
+      ref.read(authProvider.notifier).restoreSession(),
+    ]);
+
+    if (!mounted) return;
+
+    final state = ref.read(authProvider);
+    if (state.isAuthenticated) {
+      final role = state.role;
+      context.go(role == UserRole.agent ? '/home' : '/customer/home');
+    } else {
+      context.go('/login');
+    }
   }
 
   @override
@@ -48,7 +67,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Logo mark
                     Container(
                       width: 100,
                       height: 100,
@@ -61,11 +79,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                         ),
                       ),
                       child: const Center(
-                        child: Icon(
-                          Icons.agriculture_rounded,
-                          size: 52,
-                          color: Colors.white,
-                        ),
+                        child: Icon(Icons.agriculture_rounded, size: 52, color: Colors.white),
                       ),
                     )
                         .animate()
@@ -77,7 +91,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                         )
                         .fadeIn(duration: 400.ms),
                     const SizedBox(height: 28),
-                    // App name
                     const Text(
                       'SoilTech',
                       style: TextStyle(
@@ -86,10 +99,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                         color: Colors.white,
                         letterSpacing: -1,
                       ),
-                    )
-                        .animate(delay: 300.ms)
-                        .fadeIn(duration: 500.ms)
-                        .slideY(begin: 0.3, end: 0),
+                    ).animate(delay: 300.ms).fadeIn(duration: 500.ms).slideY(begin: 0.3, end: 0),
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -106,12 +116,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                           letterSpacing: 0.5,
                         ),
                       ),
-                    )
-                        .animate(delay: 500.ms)
-                        .fadeIn(duration: 400.ms)
-                        .slideY(begin: 0.2, end: 0),
+                    ).animate(delay: 500.ms).fadeIn(duration: 400.ms).slideY(begin: 0.2, end: 0),
                     const SizedBox(height: 48),
-                    // Tagline
                     const Text(
                       'Empowering Field Agents\nAcross Ghana',
                       textAlign: TextAlign.center,
@@ -121,13 +127,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                         fontWeight: FontWeight.w400,
                         height: 1.6,
                       ),
-                    )
-                        .animate(delay: 700.ms)
-                        .fadeIn(duration: 400.ms),
+                    ).animate(delay: 700.ms).fadeIn(duration: 400.ms),
                   ],
                 ),
               ),
-              // Progress area
               Padding(
                 padding: const EdgeInsets.only(bottom: 48, left: 40, right: 40),
                 child: Column(
@@ -143,9 +146,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                           minHeight: 3,
                         ),
                       ),
-                    )
-                        .animate(delay: 800.ms)
-                        .fadeIn(duration: 300.ms),
+                    ).animate(delay: 800.ms).fadeIn(duration: 300.ms),
                     const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -161,9 +162,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                           ),
                         ),
                       ],
-                    )
-                        .animate(delay: 1000.ms)
-                        .fadeIn(duration: 400.ms),
+                    ).animate(delay: 1000.ms).fadeIn(duration: 400.ms),
                   ],
                 ),
               ),

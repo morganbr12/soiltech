@@ -1,18 +1,20 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../../app/core/theme/app_colors.dart';
-import '../../../../../shared/models/app_models.dart';
-import '../../../../../shared/models/dummy_data.dart';
+import '../../../../../shared/models/customer_order.dart';
+import '../../../../../shared/models/enums.dart';
+import '../providers/orders_provider.dart';
 
-class OrdersScreen extends StatefulWidget {
+class OrdersScreen extends ConsumerStatefulWidget {
   const OrdersScreen({super.key});
 
   @override
-  State<OrdersScreen> createState() => _OrdersScreenState();
+  ConsumerState<OrdersScreen> createState() => _OrdersScreenState();
 }
 
-class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderStateMixin {
+class _OrdersScreenState extends ConsumerState<OrdersScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -27,17 +29,16 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
     super.dispose();
   }
 
-  List<CustomerOrder> _ordersForTab(int index) {
-    switch (index) {
+  List<CustomerOrder> _filter(List<CustomerOrder> all, int tabIndex) {
+    switch (tabIndex) {
       case 0:
-        return DummyData.customerOrders.where((o) =>
-            o.status == OrderStatus.onTheWay || o.status == OrderStatus.confirmed || o.status == OrderStatus.preparing).toList();
+        return all.where((o) => o.status.isActive).toList();
       case 1:
-        return DummyData.customerOrders.where((o) => o.status == OrderStatus.pending).toList();
+        return all.where((o) => o.status == OrderStatus.pending).toList();
       case 2:
-        return DummyData.customerOrders.where((o) => o.status == OrderStatus.delivered).toList();
+        return all.where((o) => o.status == OrderStatus.delivered).toList();
       case 3:
-        return DummyData.customerOrders.where((o) => o.status == OrderStatus.cancelled).toList();
+        return all.where((o) => o.status == OrderStatus.cancelled).toList();
       default:
         return [];
     }
@@ -47,6 +48,7 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final ordersAsync = ref.watch(allOrdersProvider);
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
@@ -56,6 +58,13 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
         backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: () => ref.invalidate(allOrdersProvider),
+            tooltip: 'Refresh',
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primary,
@@ -71,52 +80,98 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: List.generate(4, (tabIndex) {
-          final orders = _ordersForTab(tabIndex);
-          if (orders.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.primaryLight),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No orders here',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Your orders will appear here',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
+      body: ordersAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_off_rounded, size: 52, color: AppColors.primaryLight),
+                const SizedBox(height: 16),
+                const Text('Could not load orders', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                const SizedBox(height: 8),
+                Text(e.toString(), textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: () => ref.invalidate(allOrdersProvider),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        data: (orders) => TabBarView(
+          controller: _tabController,
+          children: List.generate(4, (tabIndex) {
+            final list = _filter(orders, tabIndex);
+            if (list.isEmpty) {
+              return _EmptyTab(tabIndex: tabIndex);
+            }
+            return RefreshIndicator(
+              onRefresh: () async => ref.invalidate(allOrdersProvider),
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                itemCount: list.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 14),
+                itemBuilder: (context, i) => _OrderCard(order: list[i]),
               ),
             );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-            itemCount: orders.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 14),
-            itemBuilder: (context, i) => _OrderCard(order: orders[i]),
-          );
-        }),
+          }),
+        ),
       ),
     );
   }
 }
 
-class _OrderCard extends StatefulWidget {
+// ─── Empty state ──────────────────────────────────────────────────────────────
+
+class _EmptyTab extends StatelessWidget {
+  final int tabIndex;
+  const _EmptyTab({required this.tabIndex});
+
+  static const _labels = ['active', 'pending', 'completed', 'cancelled'];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.primaryLight),
+          const SizedBox(height: 16),
+          Text(
+            'No ${_labels[tabIndex]} orders',
+            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Your orders will appear here',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Order card ───────────────────────────────────────────────────────────────
+
+class _OrderCard extends ConsumerStatefulWidget {
   final CustomerOrder order;
   const _OrderCard({required this.order});
 
   @override
-  State<_OrderCard> createState() => _OrderCardState();
+  ConsumerState<_OrderCard> createState() => _OrderCardState();
 }
 
-class _OrderCardState extends State<_OrderCard> {
+class _OrderCardState extends ConsumerState<_OrderCard> {
   bool _expanded = false;
+
+  void _toggleExpand() => setState(() => _expanded = !_expanded);
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +195,7 @@ class _OrderCardState extends State<_OrderCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // ─── Header ─────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -150,7 +205,7 @@ class _OrderCardState extends State<_OrderCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        o.orderNumber,
+                        '#${o.id.length > 8 ? o.id.substring(0, 8).toUpperCase() : o.id.toUpperCase()}',
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                       ),
                       const SizedBox(height: 3),
@@ -169,134 +224,67 @@ class _OrderCardState extends State<_OrderCard> {
                   ),
                   child: Text(
                     o.status.label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: o.status.color,
-                    ),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: o.status.color),
                   ),
                 ),
               ],
             ),
           ),
 
-          // Items preview
+          // ─── Summary row ────────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Row(
               children: [
-                ...o.items.take(3).map((item) => Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: CachedNetworkImage(
-                      imageUrl: item.productImage,
-                      width: 48,
-                      height: 48,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(
-                        width: 48,
-                        height: 48,
-                        color: AppColors.primaryContainer,
-                        child: const Icon(Icons.image_outlined, color: AppColors.primary, size: 20),
-                      ),
-                    ),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                )),
-                if (o.items.length > 3)
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '+${o.items.length - 3}',
-                        style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary),
+                  child: const Icon(Icons.shopping_bag_outlined, color: AppColors.primary, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${o.itemCount ?? o.items.length} item${(o.itemCount ?? o.items.length) != 1 ? 's' : ''}',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                       ),
-                    ),
+                      const SizedBox(height: 2),
+                      Text(
+                        o.deliveryAddress,
+                        style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                const Spacer(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${o.items.length} item${o.items.length > 1 ? 's' : ''}',
-                      style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'GHS ${o.totalAmount.toStringAsFixed(2)}',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.primary),
-                    ),
-                  ],
+                ),
+                Text(
+                  'GHS ${o.totalAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: AppColors.primary),
                 ),
               ],
             ),
           ),
 
-          // Driver info (if in transit)
-          if (o.driverName != null && o.status == OrderStatus.onTheWay) ...[
-            const Divider(height: 20, indent: 16, endIndent: 16),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.delivery_dining_rounded, color: AppColors.primary, size: 18),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(o.driverName!, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                        Text(o.driverVehicle ?? '', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
-                      ],
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.call_outlined, size: 14),
-                    label: const Text('Call', style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppColors.primary),
-                      foregroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      minimumSize: Size.zero,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          const Divider(height: 1, indent: 16, endIndent: 16),
 
-          const Divider(height: 20, indent: 16, endIndent: 16),
-
-          // Timeline toggle
+          // ─── Timeline toggle ────────────────────────────────────────────────
           InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: _toggleExpand,
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: Row(
                 children: [
                   Text(
                     'Order Timeline',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
-                    ),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary),
                   ),
                   const Spacer(),
                   AnimatedRotation(
@@ -309,76 +297,7 @@ class _OrderCardState extends State<_OrderCard> {
             ),
           ),
 
-          if (_expanded) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Column(
-                children: o.timeline.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final step = entry.value;
-                  final isLast = i == o.timeline.length - 1;
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Column(
-                        children: [
-                          Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: step.isCompleted ? AppColors.primary : theme.colorScheme.surfaceContainerHighest,
-                              border: Border.all(
-                                color: step.isCompleted ? AppColors.primary : theme.colorScheme.outline,
-                                width: 2,
-                              ),
-                            ),
-                            child: step.isCompleted
-                                ? const Icon(Icons.check_rounded, size: 11, color: Colors.white)
-                                : null,
-                          ),
-                          if (!isLast)
-                            Container(
-                              width: 2,
-                              height: 36,
-                              color: step.isCompleted ? AppColors.primaryLight : theme.colorScheme.surfaceContainerHighest,
-                            ),
-                        ],
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                step.event,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: step.isCompleted ? theme.colorScheme.onSurface : theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              Text(
-                                step.description,
-                                style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
-                              ),
-                              if (step.timestamp != null)
-                                Text(
-                                  _formatTime(step.timestamp!),
-                                  style: const TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w500),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
-              ),
-            ).animate().fadeIn(duration: 250.ms),
-          ],
+          if (_expanded) _TimelineSection(orderId: o.id, preloaded: o.timeline),
         ],
       ),
     ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.05, end: 0);
@@ -388,10 +307,118 @@ class _OrderCardState extends State<_OrderCard> {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
+}
+
+// ─── Timeline section (fetches detail if needed) ──────────────────────────────
+
+class _TimelineSection extends ConsumerWidget {
+  final String orderId;
+  final List<OrderTimeline> preloaded;
+
+  const _TimelineSection({required this.orderId, required this.preloaded});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (preloaded.isNotEmpty) {
+      return _buildTimeline(context, preloaded);
+    }
+
+    final detailAsync = ref.watch(orderDetailProvider(orderId));
+    return detailAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+      error: (_, _) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Text(
+          'Could not load timeline',
+          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      ),
+      data: (detail) => detail.timeline.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Text(
+                'No timeline events yet',
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            )
+          : _buildTimeline(context, detail.timeline),
+    );
+  }
+
+  Widget _buildTimeline(BuildContext context, List<OrderTimeline> events) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        children: events.asMap().entries.map((entry) {
+          final i = entry.key;
+          final step = entry.value;
+          final isLast = i == events.length - 1;
+          final isCurrent = i == events.length - 1;
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                children: [
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isCurrent ? AppColors.primary : AppColors.primaryLight,
+                      border: Border.all(
+                        color: isCurrent ? AppColors.primary : AppColors.primaryLight,
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(Icons.check_rounded, size: 11, color: Colors.white),
+                  ),
+                  if (!isLast)
+                    Container(width: 2, height: 36, color: AppColors.primaryLight),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        step.status.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isCurrent ? AppColors.primary : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      Text(
+                        step.note,
+                        style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                      Text(
+                        _formatTime(step.createdAt),
+                        style: const TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        }).toList(),
+      ),
+    ).animate().fadeIn(duration: 250.ms);
+  }
 
   String _formatTime(DateTime d) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     final h = d.hour.toString().padLeft(2, '0');
     final m = d.minute.toString().padLeft(2, '0');
-    return '$h:$m';
+    return '${d.day} ${months[d.month - 1]}, $h:$m';
   }
 }

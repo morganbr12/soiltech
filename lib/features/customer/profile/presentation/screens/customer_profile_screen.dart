@@ -4,10 +4,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../../app/core/theme/app_colors.dart';
-import '../../../../../shared/models/app_models.dart';
-import '../../../../../shared/models/dummy_data.dart';
+import '../../../../../shared/models/customer_profile_data.dart';
 import '../../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../../app/app.dart';
+import '../providers/customer_profile_provider.dart';
 
 class CustomerProfileScreen extends ConsumerWidget {
   const CustomerProfileScreen({super.key});
@@ -16,253 +16,309 @@ class CustomerProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final customer = DummyData.dummyCustomer;
     final themeMode = ref.watch(themeModeProvider);
+    final authState = ref.watch(authProvider);
+    final profileAsync = ref.watch(customerProfileProvider);
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
-      body: CustomScrollView(
-        slivers: [
-          // ─── Hero header ────────────────────────────────────────────────────
-          SliverAppBar(
-            expandedHeight: 220,
-            pinned: true,
-            backgroundColor: AppColors.primaryDark,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(gradient: AppColors.heroGradient),
-                  ),
-                  // Background pattern circles
-                  Positioned(
-                    right: -40,
-                    top: -40,
-                    child: Container(
-                      width: 180,
-                      height: 180,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withValues(alpha: 0.04),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: -30,
-                    bottom: -20,
-                    child: Container(
-                      width: 140,
-                      height: 140,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withValues(alpha: 0.04),
-                      ),
-                    ),
-                  ),
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 8),
-                          Stack(
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 3),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.2),
-                                      blurRadius: 16,
-                                      offset: const Offset(0, 6),
-                                    ),
-                                  ],
-                                ),
-                                child: CircleAvatar(
-                                  radius: 42,
-                                  backgroundImage: CachedNetworkImageProvider(
-                                    customer.profileImageUrl ?? 'https://i.pravatar.cc/150',
-                                  ),
-                                  backgroundColor: AppColors.primaryContainer,
-                                ),
-                              ),
-                              Positioned(
-                                right: 0,
-                                bottom: 0,
-                                child: GestureDetector(
-                                  onTap: () {},
-                                  child: Container(
-                                    width: 28,
-                                    height: 28,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.tertiary,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white, width: 2),
-                                    ),
-                                    child: const Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            customer.fullName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-                            ),
-                            child: Text(
-                              customer.accountType.label,
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+      body: profileAsync.when(
+        loading: () => _buildSkeleton(context, isDark),
+        error: (e, _) => _buildError(context, ref, e),
+        data: (profile) => _buildContent(context, ref, isDark, themeMode, authState, profile),
+      ),
+    );
+  }
 
-          SliverToBoxAdapter(
-            child: Column(
+  Widget _buildContent(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+    ThemeMode themeMode,
+    AuthState authState,
+    CustomerProfileData profile,
+  ) {
+    return CustomScrollView(
+      slivers: [
+        // ─── Hero header ──────────────────────────────────────────────────────
+        SliverAppBar(
+          expandedHeight: 175,
+          pinned: true,
+          backgroundColor: AppColors.primaryDark,
+          flexibleSpace: FlexibleSpaceBar(
+            background: Stack(
               children: [
-                // ─── Quick Stats ─────────────────────────────────────────────
-                Container(
-                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.cardDark : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      _StatItem(label: 'Total Orders', value: '${customer.totalOrders}'),
-                      _VerticalDivider(),
-                      _StatItem(label: 'Wishlist', value: '7'),
-                      _VerticalDivider(),
-                      _StatItem(label: 'Reviews', value: '5'),
-                    ],
-                  ),
-                ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
-
-                // ─── Contact Info ─────────────────────────────────────────────
-                _Section(
-                  title: 'Personal Information',
-                  children: [
-                    _InfoRow(icon: Icons.phone_outlined, label: 'Phone', value: customer.phone),
-                    _InfoRow(icon: Icons.email_outlined, label: 'Email', value: customer.email),
-                    _InfoRow(
-                      icon: Icons.storefront_outlined,
-                      label: 'Account Type',
-                      value: '${customer.accountType.icon}  ${customer.accountType.label}',
+                Container(decoration: BoxDecoration(gradient: AppColors.heroGradient)),
+                Positioned(
+                  right: -40,
+                  top: -40,
+                  child: Container(
+                    width: 180,
+                    height: 180,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.04),
                     ),
-                  ],
-                ),
-
-                // ─── Delivery Addresses ─────────────────────────────────────
-                _Section(
-                  title: 'Delivery Addresses',
-                  trailing: TextButton(
-                    onPressed: () {},
-                    child: const Text('Add New', style: TextStyle(fontSize: 12, color: AppColors.primary)),
                   ),
-                  children: customer.addresses.map((addr) => _AddressTile(address: addr)).toList(),
                 ),
-
-                // ─── Account Settings ────────────────────────────────────────
-                _Section(
-                  title: 'Account',
-                  children: [
-                    _MenuTile(
-                      icon: Icons.receipt_long_outlined,
-                      label: 'Order History',
-                      onTap: () {},
+                Positioned(
+                  left: -30,
+                  bottom: -20,
+                  child: Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.04),
                     ),
-                    _MenuTile(
-                      icon: Icons.favorite_outline_rounded,
-                      label: 'Wishlist',
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE63946).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 8),
+                        Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 3),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.2),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 42,
+                                backgroundColor: AppColors.primaryContainer,
+                                backgroundImage: profile.profileImageUrl != null
+                                    ? CachedNetworkImageProvider(profile.profileImageUrl!)
+                                    : null,
+                                child: profile.profileImageUrl == null
+                                    ? Text(
+                                        _initials(profile.fullName),
+                                        style: const TextStyle(
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: GestureDetector(
+                                onTap: () {},
+                                child: Container(
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.tertiary,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2),
+                                  ),
+                                  child: const Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        child: const Text('7', style: TextStyle(fontSize: 11, color: Color(0xFFE63946), fontWeight: FontWeight.w700)),
-                      ),
-                      onTap: () {},
+                        const SizedBox(height: 12),
+                        Text(
+                          profile.fullName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                      ],
                     ),
-                    _MenuTile(
-                      icon: Icons.payment_outlined,
-                      label: 'Payment Methods',
-                      onTap: () {},
-                    ),
-                    _MenuTile(
-                      icon: Icons.notifications_outlined,
-                      label: 'Notifications',
-                      onTap: () {},
-                    ),
-                    _MenuTile(
-                      icon: Icons.dark_mode_outlined,
-                      label: 'Dark Mode',
-                      trailing: Switch(
-                        value: themeMode == ThemeMode.dark,
-                        onChanged: (val) {
-                          ref.read(themeModeProvider.notifier).state =
-                              val ? ThemeMode.dark : ThemeMode.light;
-                        },
-                        activeColor: AppColors.primary,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onTap: null,
-                    ),
-                  ],
-                ),
-
-                // ─── Support ─────────────────────────────────────────────────
-                _Section(
-                  title: 'Support',
-                  children: [
-                    _MenuTile(icon: Icons.help_outline_rounded, label: 'Help Center', onTap: () {}),
-                    _MenuTile(icon: Icons.chat_outlined, label: 'Live Chat', onTap: () {}),
-                    _MenuTile(icon: Icons.privacy_tip_outlined, label: 'Privacy Policy', onTap: () {}),
-                    _MenuTile(icon: Icons.info_outline_rounded, label: 'About SoilTech', onTap: () {}),
-                  ],
-                ),
-
-                // ─── Logout ───────────────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  child: _MenuTile(
-                    icon: Icons.logout_rounded,
-                    label: 'Sign Out',
-                    iconColor: AppColors.error,
-                    textColor: AppColors.error,
-                    onTap: () => _confirmLogout(context, ref),
-                    background: AppColors.errorLight,
                   ),
                 ),
-
-                const SizedBox(height: 100),
               ],
             ),
           ),
-        ],
+        ),
+
+        SliverToBoxAdapter(
+          child: Column(
+            children: [
+              // ─── Personal Information ───────────────────────────────────────
+              _Section(
+                title: 'Personal Information',
+                children: [
+                  _InfoRow(icon: Icons.person_outline_rounded, label: 'Full Name', value: profile.fullName),
+                  _InfoRow(icon: Icons.phone_outlined, label: 'Phone', value: profile.phone ?? '—'),
+                  if (authState.email != null && authState.email!.isNotEmpty)
+                    _InfoRow(icon: Icons.email_outlined, label: 'Email', value: authState.email!),
+                  _InfoRow(
+                    icon: Icons.calendar_today_outlined,
+                    label: 'Member Since',
+                    value: _formatDate(profile.createdAt),
+                  ),
+                ],
+              ),
+
+              // ─── Delivery Address ───────────────────────────────────────────
+              _Section(
+                title: 'Delivery Address',
+                trailing: TextButton(
+                  onPressed: () {},
+                  child: const Text('Add New', style: TextStyle(fontSize: 12, color: AppColors.primary)),
+                ),
+                children: [
+                  if (profile.address != null && profile.address!.isNotEmpty)
+                    _AddressRow(address: profile.address!)
+                  else
+                    _EmptyAddress(),
+                ],
+              ),
+
+              // ─── Account Settings ───────────────────────────────────────────
+              _Section(
+                title: 'Account',
+                children: [
+                  _MenuTile(
+                    icon: Icons.receipt_long_outlined,
+                    label: 'Order History',
+                    onTap: () {},
+                  ),
+                  _MenuTile(
+                    icon: Icons.favorite_outline_rounded,
+                    label: 'Wishlist',
+                    onTap: () {},
+                  ),
+                  _MenuTile(
+                    icon: Icons.payment_outlined,
+                    label: 'Payment Methods',
+                    onTap: () {},
+                  ),
+                  _MenuTile(
+                    icon: Icons.notifications_outlined,
+                    label: 'Notifications',
+                    onTap: () {},
+                  ),
+                  _MenuTile(
+                    icon: Icons.dark_mode_outlined,
+                    label: 'Dark Mode',
+                    trailing: Switch(
+                      value: themeMode == ThemeMode.dark,
+                      onChanged: (val) {
+                        ref.read(themeModeProvider.notifier).state =
+                            val ? ThemeMode.dark : ThemeMode.light;
+                      },
+                      activeThumbColor: AppColors.primary,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onTap: null,
+                  ),
+                ],
+              ),
+
+              // ─── Support ────────────────────────────────────────────────────
+              _Section(
+                title: 'Support',
+                children: [
+                  _MenuTile(icon: Icons.help_outline_rounded, label: 'Help Center', onTap: () {}),
+                  _MenuTile(icon: Icons.chat_outlined, label: 'Live Chat', onTap: () {}),
+                  _MenuTile(icon: Icons.privacy_tip_outlined, label: 'Privacy Policy', onTap: () {}),
+                  _MenuTile(icon: Icons.info_outline_rounded, label: 'About SoilTech', onTap: () {}),
+                ],
+              ),
+
+              // ─── Logout ─────────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: _MenuTile(
+                  icon: Icons.logout_rounded,
+                  label: 'Sign Out',
+                  iconColor: AppColors.error,
+                  textColor: AppColors.error,
+                  onTap: () => _confirmLogout(context, ref),
+                  background: AppColors.errorLight,
+                ),
+              ),
+
+              const SizedBox(height: 100),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSkeleton(BuildContext context, bool isDark) {
+    final base = isDark ? AppColors.cardDark : Colors.white;
+    final shimmer = isDark ? const Color(0xFF2A2A2A) : const Color(0xFFEEEEEE);
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          expandedHeight: 220,
+          pinned: true,
+          backgroundColor: AppColors.primaryDark,
+          flexibleSpace: FlexibleSpaceBar(
+            background: Container(decoration: BoxDecoration(gradient: AppColors.heroGradient)),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Column(
+            children: [
+              const SizedBox(height: 16),
+              ...[120.0, 80.0, 80.0, 80.0, 60.0].map(
+                (h) => Container(
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  height: h,
+                  decoration: BoxDecoration(
+                    color: base,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: _ShimmerBox(color: shimmer),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildError(BuildContext context, WidgetRef ref, Object error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_rounded, size: 56, color: AppColors.primaryLight),
+            const SizedBox(height: 16),
+            const Text(
+              'Could not load profile',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error.toString(),
+              style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () => ref.invalidate(customerProfileProvider),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -270,18 +326,18 @@ class CustomerProfileScreen extends ConsumerWidget {
   void _confirmLogout(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w700)),
         content: const Text('Are you sure you want to sign out?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.of(context).pop();
+              Navigator.of(ctx).pop();
               ref.read(authProvider.notifier).logout();
               context.go('/login');
             },
@@ -296,48 +352,20 @@ class CustomerProfileScreen extends ConsumerWidget {
       ),
     );
   }
+
+  String _initials(String name) {
+    final parts = name.trim().split(' ');
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    return name.isNotEmpty ? name[0].toUpperCase() : '?';
+  }
+
+  String _formatDate(DateTime dt) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
 }
 
 // ─── Sub-widgets ─────────────────────────────────────────────────────────────
-
-class _StatItem extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _StatItem({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.primary),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _VerticalDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 36,
-      color: Theme.of(context).colorScheme.outlineVariant,
-    );
-  }
-}
 
 class _Section extends StatelessWidget {
   final String title;
@@ -368,7 +396,7 @@ class _Section extends StatelessWidget {
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.2),
                 ),
                 const Spacer(),
-                if (trailing != null) trailing!,
+                ?trailing,
               ],
             ),
           ),
@@ -412,9 +440,9 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _AddressTile extends StatelessWidget {
-  final dynamic address;
-  const _AddressTile({required this.address});
+class _AddressRow extends StatelessWidget {
+  final String address;
+  const _AddressRow({required this.address});
 
   @override
   Widget build(BuildContext context) {
@@ -430,47 +458,36 @@ class _AddressTile extends StatelessWidget {
               color: AppColors.primaryContainer,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              address.label == 'Home' ? Icons.home_outlined : Icons.business_outlined,
-              size: 18,
-              color: AppColors.primary,
-            ),
+            child: const Icon(Icons.location_on_outlined, size: 18, color: AppColors.primary),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(address.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                    if (address.isDefault) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text('Default', style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600)),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${address.fullAddress}, ${address.city}',
-                  style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+            child: Text(
+              address,
+              style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurface),
             ),
           ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.edit_outlined, size: 16),
-            color: theme.colorScheme.onSurfaceVariant,
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyAddress extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Row(
+        children: [
+          const Icon(Icons.location_off_outlined, size: 18, color: AppColors.primaryLight),
+          const SizedBox(width: 12),
+          Text(
+            'No delivery address saved',
+            style: TextStyle(
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -500,11 +517,10 @@ class _MenuTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Container(
       decoration: BoxDecoration(
         color: background,
-        borderRadius: onTap != null && background != null ? BorderRadius.circular(16) : null,
+        borderRadius: background != null ? BorderRadius.circular(16) : null,
       ),
       child: InkWell(
         onTap: onTap,
@@ -534,13 +550,49 @@ class _MenuTile extends StatelessWidget {
                 ),
               ),
               trailing ??
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 20,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  Icon(Icons.chevron_right_rounded, size: 20, color: theme.colorScheme.onSurfaceVariant),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ShimmerBox extends StatefulWidget {
+  final Color color;
+  const _ShimmerBox({required this.color});
+
+  @override
+  State<_ShimmerBox> createState() => _ShimmerBoxState();
+}
+
+class _ShimmerBoxState extends State<_ShimmerBox> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat(reverse: true);
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, _) => Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: widget.color.withValues(alpha: 0.3 + 0.4 * _anim.value),
         ),
       ),
     );

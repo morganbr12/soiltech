@@ -3,7 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/core/theme/app_colors.dart';
-import '../../../../shared/models/app_models.dart';
+import '../../../../shared/models/enums.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
@@ -81,19 +81,30 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
     setState(() => _isLoading = true);
 
-    final data = CustomerRegistrationData(
+    final success = await ref.read(authProvider.notifier).register(
       fullName: _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
       email: _emailController.text.trim(),
+      phone: _phoneController.text.trim(),
       password: _passwordController.text,
-      accountType: _accountType,
-      location: _useGps ? 'GPS Location' : _addressController.text.trim(),
+      accountType: _accountType.apiValue,
+      address: _useGps ? null : _addressController.text.trim(),
     );
 
-    final success = await ref.read(authProvider.notifier).register(data);
     if (!mounted) return;
     setState(() => _isLoading = false);
-    if (success) context.go('/customer/home');
+
+    if (success) {
+      context.go('/customer/home');
+    } else {
+      final error = ref.read(authProvider).error ?? 'Registration failed. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override

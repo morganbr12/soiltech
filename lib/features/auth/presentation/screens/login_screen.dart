@@ -3,7 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/core/theme/app_colors.dart';
-import '../../../../shared/models/app_models.dart';
+import '../../../../shared/models/enums.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
@@ -17,42 +17,32 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _identifierController = TextEditingController(text: '+233 24 567 8901');
-  final _passwordController = TextEditingController(text: 'password123');
-  bool _rememberMe = false;
-  bool _isLoading = false;
+  final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
   String? _errorMessage;
 
   @override
   void dispose() {
-    _identifierController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _handleLogin() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    setState(() => _errorMessage = null);
 
     final success = await ref
         .read(authProvider.notifier)
-        .login(_identifierController.text, _passwordController.text);
+        .login(_phoneController.text.trim(), _passwordController.text);
 
     if (!mounted) return;
-    setState(() => _isLoading = false);
 
     if (success) {
       final role = ref.read(userRoleProvider);
-      if (role == UserRole.agent) {
-        context.go('/home');
-      } else {
-        context.go('/customer/home');
-      }
+      context.go(role == UserRole.agent ? '/home' : '/customer/home');
     } else {
-      setState(() => _errorMessage = 'Invalid credentials. Please try again.');
+      setState(() => _errorMessage = ref.read(authProvider).error ?? 'Invalid credentials.');
     }
   }
 
@@ -60,6 +50,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isLoading = ref.watch(authProvider).status == AuthStatus.authenticating;
 
     return Scaffold(
       body: SafeArea(
@@ -70,7 +61,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             children: [
               const SizedBox(height: 48),
 
-              // Logo
               ClipRRect(
                 borderRadius: BorderRadius.circular(22),
                 child: Image.asset(
@@ -79,10 +69,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   height: 90,
                   fit: BoxFit.cover,
                 ),
-              )
-                  .animate()
-                  .fadeIn(duration: 500.ms)
-                  .scale(begin: const Offset(0.7, 0.7)),
+              ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.7, 0.7)),
 
               const SizedBox(height: 20),
 
@@ -107,7 +94,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
               const SizedBox(height: 40),
 
-              // Form card
               Container(
                 padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
@@ -128,9 +114,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     children: [
                       Text(
                         'Welcome back',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -142,14 +126,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 24),
 
                       AppTextField(
-                        label: 'Phone or Email',
+                        label: 'Phone Number',
                         hint: '+233 XX XXX XXXX',
-                        controller: _identifierController,
-                        keyboardType: TextInputType.emailAddress,
-                        prefixIcon: Icons.person_outline_rounded,
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        prefixIcon: Icons.phone_outlined,
                         textInputAction: TextInputAction.next,
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Phone or email required';
+                          if (v == null || v.trim().isEmpty) return 'Phone number required';
                           return null;
                         },
                       ).animate(delay: 200.ms).fadeIn().slideY(begin: 0.1, end: 0),
@@ -166,55 +150,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onSubmitted: (_) => _handleLogin(),
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'Password required';
-                          if (v.length < 6) return 'Password too short';
+                          if (v.length < 8) return 'Password too short';
                           return null;
                         },
                       ).animate(delay: 250.ms).fadeIn().slideY(begin: 0.1, end: 0),
 
                       const SizedBox(height: 12),
 
-                      // Remember me + Forgot password row
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () => setState(() => _rememberMe = !_rememberMe),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: Checkbox(
-                                    value: _rememberMe,
-                                    onChanged: (v) => setState(() => _rememberMe = v ?? false),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    activeColor: AppColors.primary,
-                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Remember me',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => context.push('/forgot-password'),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          const Spacer(),
-                          TextButton(
-                            onPressed: () => context.push('/forgot-password'),
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: const Text('Forgot Password?', style: TextStyle(fontSize: 12)),
-                          ),
-                        ],
+                          child: const Text('Forgot Password?', style: TextStyle(fontSize: 12)),
+                        ),
                       ).animate(delay: 300.ms).fadeIn(),
 
                       if (_errorMessage != null) ...[
@@ -249,8 +202,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                       AppButton(
                         label: 'Sign In',
-                        onPressed: _isLoading ? null : _handleLogin,
-                        isLoading: _isLoading,
+                        onPressed: isLoading ? null : _handleLogin,
+                        isLoading: isLoading,
                         icon: Icons.login_rounded,
                       ).animate(delay: 350.ms).fadeIn().slideY(begin: 0.1, end: 0),
                     ],
@@ -260,7 +213,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
               const SizedBox(height: 28),
 
-              // Divider
               Row(
                 children: [
                   Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
