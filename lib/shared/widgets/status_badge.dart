@@ -115,12 +115,12 @@ class StatusBadge extends StatelessWidget {
   factory StatusBadge.fromProduceStatus(ProduceStatus status) {
     return switch (status) {
       ProduceStatus.pending => const StatusBadge(
-          label: 'Pending',
+          label: 'Not Collected',
           color: Color(0xFFFFF3E0),
           textColor: Color(0xFFE65100),
         ),
-      ProduceStatus.approved => const StatusBadge(
-          label: 'Approved',
+      ProduceStatus.collected => const StatusBadge(
+          label: 'Collected',
           color: AppColors.successLight,
           textColor: AppColors.success,
         ),
@@ -128,6 +128,36 @@ class StatusBadge extends StatelessWidget {
           label: 'Rejected',
           color: AppColors.errorLight,
           textColor: AppColors.error,
+        ),
+    };
+  }
+
+  factory StatusBadge.fromListingStatus(ListingStatus status) {
+    return switch (status) {
+      ListingStatus.available => const StatusBadge(
+          label: 'Approved',
+          color: Color(0xFFE8F5E9),
+          textColor: Color(0xFF2E7D32),
+        ),
+      ListingStatus.pendingApproval => const StatusBadge(
+          label: 'Pending Approval',
+          color: Color(0xFFE3F2FD),
+          textColor: Color(0xFF1565C0),
+        ),
+      ListingStatus.soldOut => const StatusBadge(
+          label: 'Sold Out',
+          color: Color(0xFFF3E5F5),
+          textColor: Color(0xFF6A1B9A),
+        ),
+      ListingStatus.unlisted => const StatusBadge(
+          label: 'Unlisted',
+          color: Color(0xFFF5F5F5),
+          textColor: Color(0xFF757575),
+        ),
+      ListingStatus.unknown => const StatusBadge(
+          label: 'No Listing',
+          color: Color(0xFFF5F5F5),
+          textColor: Color(0xFF9E9E9E),
         ),
     };
   }

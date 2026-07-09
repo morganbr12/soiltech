@@ -23,7 +23,7 @@ class _ProduceListScreenState extends ConsumerState<ProduceListScreen>
   static const _tabs = [
     (label: 'All', status: null),
     (label: 'Pending', status: ProduceStatus.pending),
-    (label: 'Approved', status: ProduceStatus.approved),
+    (label: 'Collected', status: ProduceStatus.collected),
     (label: 'Rejected', status: ProduceStatus.rejected),
   ];
 
@@ -235,7 +235,16 @@ class _ProduceCard extends StatelessWidget {
                   ],
                 ),
               ),
-              StatusBadge.fromProduceStatus(record.status),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  StatusBadge.fromProduceStatus(record.status),
+                  if (record.listingStatus != ListingStatus.unknown) ...[
+                    const SizedBox(height: 4),
+                    StatusBadge.fromListingStatus(record.listingStatus),
+                  ],
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 12),
