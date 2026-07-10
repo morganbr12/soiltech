@@ -168,18 +168,16 @@ class _EmptyTab extends StatelessWidget {
 
 // ─── Order card ───────────────────────────────────────────────────────────────
 
-class _OrderCard extends ConsumerStatefulWidget {
+class _OrderCard extends StatefulWidget {
   final CustomerOrder order;
   const _OrderCard({required this.order});
 
   @override
-  ConsumerState<_OrderCard> createState() => _OrderCardState();
+  State<_OrderCard> createState() => _OrderCardState();
 }
 
-class _OrderCardState extends ConsumerState<_OrderCard> {
+class _OrderCardState extends State<_OrderCard> {
   bool _expanded = false;
-
-  void _toggleExpand() => setState(() => _expanded = !_expanded);
 
   @override
   Widget build(BuildContext context) {
@@ -203,7 +201,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ─── Header ─────────────────────────────────────────────────────────
+          // ── Header ────────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -213,7 +211,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '#${o.id.length > 8 ? o.id.substring(0, 8).toUpperCase() : o.id.toUpperCase()}',
+                        o.orderCode.isNotEmpty ? o.orderCode : '#${o.id.substring(0, 8).toUpperCase()}',
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                       ),
                       const SizedBox(height: 3),
@@ -224,34 +222,31 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: o.status.color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    o.status.label,
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: o.status.color),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _StatusChip(status: o.status),
+                    const SizedBox(height: 4),
+                    _PaymentChip(paymentStatus: o.paymentStatus),
+                  ],
                 ),
               ],
             ),
           ),
 
-          // ─── Summary row ────────────────────────────────────────────────────
+          // ── Produce summary ───────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Row(
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: AppColors.primaryContainer,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.shopping_bag_outlined, color: AppColors.primary, size: 20),
+                  child: const Icon(Icons.agriculture_rounded, color: AppColors.primary, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -259,15 +254,13 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${o.itemCount ?? o.items.length} item${(o.itemCount ?? o.items.length) != 1 ? 's' : ''}',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        o.produce,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        o.deliveryAddress,
-                        style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        '${o.quantityKg.toStringAsFixed(1)} kg  ·  GHS ${o.pricePerKg.toStringAsFixed(2)}/kg',
+                        style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -282,9 +275,9 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
 
           const Divider(height: 1, indent: 16, endIndent: 16),
 
-          // ─── Expand toggle ──────────────────────────────────────────────────
+          // ── Expand toggle ─────────────────────────────────────────────────────
           InkWell(
-            onTap: _toggleExpand,
+            onTap: () => setState(() => _expanded = !_expanded),
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -305,7 +298,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
             ),
           ),
 
-          if (_expanded) _OrderDetailSection(order: o),
+          if (_expanded) _OrderDetails(order: o),
         ],
       ),
     ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.05, end: 0);
@@ -317,156 +310,131 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
   }
 }
 
-// ─── Order detail section — fetches items + timeline ─────────────────────────
+// ─── Expanded detail section ──────────────────────────────────────────────────
 
-class _OrderDetailSection extends ConsumerWidget {
+class _OrderDetails extends StatelessWidget {
   final CustomerOrder order;
-  const _OrderDetailSection({required this.order});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final detailAsync = ref.watch(orderDetailProvider(order.id));
-    final theme = Theme.of(context);
-
-    return detailAsync.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
-      ),
-      error: (err, st) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Text('Could not load details',
-            style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
-      ),
-      data: (detail) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Items ─────────────────────────────────────────────────────────
-            if (detail.items.isNotEmpty) ...[
-              _SectionLabel(label: 'Items Ordered'),
-              const SizedBox(height: 8),
-              ...detail.items.map((item) => _ItemRow(item: item, theme: theme)),
-              const SizedBox(height: 12),
-            ],
-
-            // ── Timeline ──────────────────────────────────────────────────────
-            _SectionLabel(label: 'Order Timeline'),
-            const SizedBox(height: 8),
-            if (detail.timeline.isEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text('No updates yet',
-                    style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
-              )
-            else
-              ...detail.timeline.asMap().entries.map((e) {
-                final i = e.key;
-                final step = e.value;
-                final isLast = i == detail.timeline.length - 1;
-                final isCurrent = isLast;
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Column(
-                      children: [
-                        Container(
-                          width: 20, height: 20,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isCurrent ? AppColors.primary : AppColors.primaryLight,
-                          ),
-                          child: const Icon(Icons.check_rounded, size: 11, color: Colors.white),
-                        ),
-                        if (!isLast) Container(width: 2, height: 36, color: AppColors.primaryLight),
-                      ],
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(step.status.toUpperCase(),
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                                    color: isCurrent ? AppColors.primary : theme.colorScheme.onSurface)),
-                            if (step.note.isNotEmpty)
-                              Text(step.note,
-                                  style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
-                            Text(_formatTime(step.createdAt),
-                                style: const TextStyle(fontSize: 10, color: AppColors.primaryLight, fontWeight: FontWeight.w500)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }),
-          ],
-        ),
-      ).animate().fadeIn(duration: 250.ms),
-    );
-  }
-
-  String _formatTime(DateTime d) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final h = d.hour.toString().padLeft(2, '0');
-    final m = d.minute.toString().padLeft(2, '0');
-    return '${d.day} ${months[d.month - 1]}, $h:$m';
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  const _SectionLabel({required this.label});
+  const _OrderDetails({required this.order});
 
   @override
   Widget build(BuildContext context) {
-    return Text(label,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            letterSpacing: 0.5));
+    final theme = Theme.of(context);
+    final o = order;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _DetailRow(
+            icon: Icons.location_on_outlined,
+            label: 'Region',
+            value: o.region.isNotEmpty ? o.region : '—',
+            theme: theme,
+          ),
+          if (o.assignedAgent != null)
+            _DetailRow(
+              icon: Icons.support_agent_rounded,
+              label: 'Assigned Agent',
+              value: o.assignedAgent!,
+              theme: theme,
+            ),
+          if (o.assignedDriver != null)
+            _DetailRow(
+              icon: Icons.local_shipping_outlined,
+              label: 'Driver',
+              value: o.assignedDriver!,
+              theme: theme,
+            ),
+          if (o.orderDate != null)
+            _DetailRow(
+              icon: Icons.calendar_today_outlined,
+              label: 'Order Date',
+              value: _fmt(o.orderDate!),
+              theme: theme,
+            ),
+          if (o.deliveryDate != null)
+            _DetailRow(
+              icon: Icons.event_available_rounded,
+              label: 'Delivery Date',
+              value: _fmt(o.deliveryDate!),
+              theme: theme,
+            ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 200.ms);
+  }
+
+  String _fmt(DateTime d) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
 }
 
-class _ItemRow extends StatelessWidget {
-  final OrderItem item;
+class _DetailRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
   final ThemeData theme;
-  const _ItemRow({required this.item, required this.theme});
+
+  const _DetailRow({required this.icon, required this.label, required this.value, required this.theme});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.primaryContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.agriculture_rounded, size: 18, color: AppColors.primary),
-          ),
-          const SizedBox(width: 10),
+          Icon(icon, size: 14, color: AppColors.primaryLight),
+          const SizedBox(width: 8),
+          Text('$label: ', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(item.productId, // replaced by name once API returns it
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text('Qty: ${item.quantity}  ·  GHS ${item.unitPrice.toStringAsFixed(2)} each',
-                    style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
-              ],
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          Text('GHS ${item.subtotal.toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary)),
         ],
       ),
+    );
+  }
+}
+
+// ─── Status chips ─────────────────────────────────────────────────────────────
+
+class _StatusChip extends StatelessWidget {
+  final OrderStatus status;
+  const _StatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: status.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(status.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: status.color)),
+    );
+  }
+}
+
+class _PaymentChip extends StatelessWidget {
+  final String paymentStatus;
+  const _PaymentChip({required this.paymentStatus});
+
+  @override
+  Widget build(BuildContext context) {
+    final isPaid = paymentStatus.toUpperCase() == 'PAID';
+    final color = isPaid ? AppColors.success : const Color(0xFFF4A261);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(paymentStatus, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
     );
   }
 }

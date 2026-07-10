@@ -7,6 +7,7 @@ class AgentFarmer {
   final String phone;
   final String region;
   final String district;
+  final String community;
   final List<String> cropTypes;
   final FarmerStatus status;
   final bool kycVerified;
@@ -18,6 +19,7 @@ class AgentFarmer {
     required this.phone,
     required this.region,
     required this.district,
+    required this.community,
     required this.cropTypes,
     required this.status,
     required this.kycVerified,
@@ -37,6 +39,7 @@ class AgentFarmer {
       phone: json['phone'] as String? ?? '',
       region: json['region'] as String? ?? '',
       district: json['district'] as String? ?? '',
+      community: json['community'] as String? ?? '',
       cropTypes: (json['cropTypes'] as List<dynamic>?)?.cast<String>() ?? [],
       status: status,
       kycVerified: json['kycVerified'] as bool? ?? false,

@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http_parser/http_parser.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../app/core/network/api_constants.dart';
 import '../../../app/core/network/dio_provider.dart';
 import '../../../shared/models/produce_entry.dart';
@@ -66,5 +68,54 @@ class ProduceRepository {
     final res = await _dio.get(ApiConstants.agentProduceRecords, queryParameters: params);
     final list = res.data['data'] as List<dynamic>;
     return list.map((e) => ProduceEntry.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> submitCollection({
+    required String farmerId,
+    String? farmId,
+    required String cropType,
+    required double weightKg,
+    required int quantityBags,
+    required double moisturePercent,
+    required String qualityGrade,
+    required DateTime collectionDate,
+    required double pricePerKg,
+    String notes = '',
+    List<XFile> photos = const [],
+  }) async {
+    final fields = <String, dynamic>{
+      'farmer_id': farmerId,
+      if (farmId != null) 'farm_id': farmId,
+      'crop_type': cropType.toUpperCase(),
+      'quantity_kg': weightKg,
+      'quantity_bags': quantityBags,
+      'moisture_percent': moisturePercent,
+      'quality_grade': qualityGrade,
+      'collection_date': collectionDate.toIso8601String(),
+      'price_per_kg': pricePerKg,
+      if (notes.isNotEmpty) 'notes': notes,
+    };
+
+    if (photos.isEmpty) {
+      await _api.createProduceRecord(fields);
+      return;
+    }
+
+    final photoFiles = <MultipartFile>[];
+    for (final photo in photos) {
+      final bytes = await photo.readAsBytes();
+      final mime = photo.mimeType ?? 'image/jpeg';
+      final parts = mime.split('/');
+      photoFiles.add(MultipartFile.fromBytes(
+        bytes,
+        filename: photo.name,
+        contentType: MediaType(parts[0], parts.length > 1 ? parts[1] : 'jpeg'),
+      ));
+    }
+
+    await _dio.post(
+      ApiConstants.produce,
+      data: FormData.fromMap({...fields, 'photos': photoFiles}),
+    );
   }
 }

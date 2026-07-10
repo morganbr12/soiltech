@@ -1,13 +1,19 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../app/core/constants/app_constants.dart';
 import '../../../../app/core/theme/app_colors.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../../farmers/presentation/providers/farmers_provider.dart';
+import '../../data/produce_repository.dart';
+import '../../presentation/providers/produce_provider.dart';
+import '../../../../app/core/utils/app_logger.dart';
 
 class ProduceCollectionScreen extends ConsumerStatefulWidget {
   final String? farmerId;
@@ -21,7 +27,8 @@ class _ProduceCollectionScreenState extends ConsumerState<ProduceCollectionScree
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isSavingDraft = false;
-  int _photoCount = 0;
+  final List<XFile> _photos = [];
+  final _picker = ImagePicker();
 
   String? _selectedFarmerId;
   String? _selectedFarmId;
@@ -59,33 +66,142 @@ class _ProduceCollectionScreenState extends ConsumerState<ProduceCollectionScree
   void _onFarmerChanged(String? farmerId) {
     setState(() {
       _selectedFarmerId = farmerId;
-      _selectedFarmId = null; // reset farm when farmer changes
+      _selectedFarmId = null;
     });
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    final image = await _picker.pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1920,
+    );
+    if (image != null && mounted) {
+      setState(() => _photos.add(image));
+    }
+  }
+
+  void _showPhotoSourceSheet() {
+    if (_photos.length >= AppConstants.maxUploadImages) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Material(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: BorderRadius.circular(20),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40, height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  ListTile(
+                    leading: Container(
+                      width: 42, height: 42,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryContainer.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+                    ),
+                    title: const Text('Take Photo', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Open camera to capture'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _pickImage(ImageSource.camera);
+                    },
+                  ),
+                  ListTile(
+                    leading: Container(
+                      width: 42, height: 42,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryContainer.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+                    ),
+                    title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Select an existing photo'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _pickImage(ImageSource.gallery);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _submit({bool isDraft = false}) async {
     if (!isDraft && !(_formKey.currentState?.validate() ?? false)) return;
-    setState(() {
-      if (isDraft) {
-        _isSavingDraft = true;
-      } else {
-        _isLoading = true;
-      }
-    });
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        _isSavingDraft = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isDraft ? 'Draft saved!' : 'Collection submitted successfully!'),
-          backgroundColor: AppColors.success,
-        ),
+    if (!isDraft && _selectedFarmerId == null) return;
+
+    setState(() => isDraft ? _isSavingDraft = true : _isLoading = true);
+
+    try {
+      await ref.read(produceRepositoryProvider).submitCollection(
+        farmerId: _selectedFarmerId!,
+        farmId: _selectedFarmId,
+        cropType: _selectedCropType ?? '',
+        weightKg: double.tryParse(_weightController.text) ?? 0,
+        quantityBags: int.tryParse(_bagsController.text) ?? 0,
+        moisturePercent: double.tryParse(_moistureController.text) ?? 0,
+        qualityGrade: _selectedGrade ?? 'Grade A',
+        collectionDate: _collectionDate,
+        pricePerKg: double.tryParse(_priceController.text) ?? 0,
+        notes: _notesController.text.trim(),
+        photos: _photos,
       );
-      context.pop();
+
+      ref.invalidate(produceListProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Collection submitted successfully!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        context.pop();
+      }
+    } catch (e, st) {
+      appLogger.e('Submit collection failed', error: e, stackTrace: st);
+      if (mounted) {
+        setState(() { _isLoading = false; _isSavingDraft = false; });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_parseSubmitError(e)),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      return;
     }
+
+    if (mounted) setState(() { _isLoading = false; _isSavingDraft = false; });
+  }
+
+  String _parseSubmitError(Object e) {
+    final msg = e.toString();
+    if (msg.contains('400')) return 'Invalid data. Please check the form.';
+    if (msg.contains('404')) return 'Farmer or farm not found.';
+    if (msg.contains('SocketException') || msg.contains('connection')) return 'No internet connection.';
+    return 'Submission failed. Please try again.';
   }
 
   InputDecoration _dropdownDecoration(String label, IconData icon, bool isDark) {
@@ -168,7 +284,7 @@ class _ProduceCollectionScreenState extends ConsumerState<ProduceCollectionScree
                   items: farmers.map((f) => DropdownMenuItem(
                     value: f.id,
                     child: Text(
-                      '${f.fullName}${f.region.isNotEmpty ? ' · ${f.region}' : ''}',
+                      '${f.fullName}${f.community.isNotEmpty ? ' · ${f.community}' : ''}',
                       style: const TextStyle(fontSize: 14),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -344,64 +460,70 @@ class _ProduceCollectionScreenState extends ConsumerState<ProduceCollectionScree
 
               // ── Step 4: Photos ──────────────────────────────────────────────
               _SectionTitle(title: 'Produce Photos', step: 4),
+              const SizedBox(height: 4),
+              Text(
+                'Optional · ${_photos.length}/${AppConstants.maxUploadImages} added',
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
               const SizedBox(height: 12),
               SizedBox(
                 height: 88,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
-                    GestureDetector(
-                      onTap: () => setState(() {
-                        if (_photoCount < AppConstants.maxUploadImages) _photoCount++;
-                      }),
-                      child: Container(
-                        width: 80, height: 80,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryContainer.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.camera_alt_outlined, color: AppColors.primary, size: 22),
-                            const SizedBox(height: 4),
-                            Text(
-                              '$_photoCount/${AppConstants.maxUploadImages}',
-                              style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600),
+                    // Add button — hidden once limit reached
+                    if (_photos.length < AppConstants.maxUploadImages)
+                      GestureDetector(
+                        onTap: _showPhotoSourceSheet,
+                        child: Container(
+                          width: 80, height: 80,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryContainer.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.4),
+                              style: BorderStyle.solid,
                             ),
-                          ],
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo_outlined, color: AppColors.primary, size: 22),
+                              SizedBox(height: 4),
+                              Text('Add Photo', style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    ...List.generate(
-                      _photoCount,
-                      (i) => Container(
-                        width: 80, height: 80,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryContainer.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Stack(
-                          children: [
-                            Center(child: Icon(Icons.image_rounded, color: AppColors.primary.withValues(alpha: 0.4), size: 32)),
-                            Positioned(
-                              top: 4, right: 4,
-                              child: GestureDetector(
-                                onTap: () => setState(() => _photoCount--),
-                                child: Container(
-                                  width: 20, height: 20,
-                                  decoration: BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
-                                  child: const Icon(Icons.close, size: 12, color: Colors.white),
-                                ),
-                              ),
+                    // Thumbnails
+                    ..._photos.asMap().entries.map((e) => Stack(
+                      children: [
+                        Container(
+                          width: 80, height: 80,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(14)),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Image.file(
+                              File(e.value.path),
+                              fit: BoxFit.cover,
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
+                        Positioned(
+                          top: 4, right: 12,
+                          child: GestureDetector(
+                            onTap: () => setState(() => _photos.removeAt(e.key)),
+                            child: Container(
+                              width: 20, height: 20,
+                              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                              child: const Icon(Icons.close, size: 12, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )),
                   ],
                 ),
               ).animate(delay: 220.ms).fadeIn(duration: 300.ms),

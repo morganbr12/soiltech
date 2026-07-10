@@ -21,7 +21,6 @@ import '../../../features/profile/presentation/screens/profile_screen.dart';
 import '../../../features/customer/cart/cart_screen.dart';
 import '../../../features/customer/home/presentation/screens/customer_home_screen.dart';
 import '../../../features/customer/orders/presentation/screens/orders_screen.dart';
-import '../../../features/customer/chats/presentation/screens/chats_screen.dart';
 import '../../../features/customer/profile/presentation/screens/customer_profile_screen.dart';
 import '../../../features/customer/products/presentation/screens/product_detail_screen.dart';
 import 'main_shell.dart';
@@ -157,7 +156,7 @@ final routerProvider = Provider<GoRouter>((ref) => GoRouter(
       ],
     ),
 
-    // ─── Customer Shell (4 tabs) ───────────────────────────────────────────────
+    // ─── Customer Shell (3 tabs) ───────────────────────────────────────────────
     StatefulShellRoute.indexedStack(
       builder: (_, __, shell) => CustomerShell(shell: shell),
       branches: [
@@ -174,14 +173,6 @@ final routerProvider = Provider<GoRouter>((ref) => GoRouter(
             GoRoute(
               path: '/customer/orders',
               builder: (_, _) => const OrdersScreen(),
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/customer/chats',
-              builder: (_, _) => const ChatsScreen(),
             ),
           ],
         ),

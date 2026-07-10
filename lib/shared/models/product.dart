@@ -18,6 +18,8 @@ abstract class Product with _$Product {
     required int stockQuantity,
     required String categoryId,
     String? produceListingId,
+    String? farmerId,
+    String? agentId,
     required String farmerName,
     @Default('') String location,
     @Default('') String freshnessLabel,

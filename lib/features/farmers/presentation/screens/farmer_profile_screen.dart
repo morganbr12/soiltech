@@ -219,6 +219,7 @@ class _FarmerProfileScreenState extends ConsumerState<FarmerProfileScreen> {
                       children: [
                         _InfoRow(icon: Icons.map_outlined, label: 'Region', value: farmer.region),
                         _InfoRow(icon: Icons.location_city_outlined, label: 'District', value: farmer.district),
+                        _InfoRow(icon: Icons.holiday_village_outlined, label: 'Community', value: farmer.community),
                         if (farmer.lat != null && farmer.lng != null)
                           _InfoRow(
                             icon: Icons.my_location_rounded,

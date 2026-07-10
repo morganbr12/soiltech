@@ -95,13 +95,16 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   Future<bool> _placeOrder(
       String deliveryAddress, String notes, List<CartItem> items, String paymentType) async {
+    if (items.isEmpty) return false;
+    final first = items.first;
+    final totalKg = items.fold<double>(0.0, (sum, e) => sum + e.quantity.toDouble());
     final ok = await ref.read(placeOrderProvider.notifier).placeOrder(
-      deliveryAddress: deliveryAddress,
-      items: items
-          .map((e) => {'productId': e.product.id, 'quantity': e.quantity})
-          .toList(),
-      notes: notes.isEmpty ? null : notes,
+      produce: first.product.name,
+      quantityKg: totalKg,
+      pricePerKg: first.product.pricePerUnit,
       paymentType: paymentType,
+      farmerId: first.product.farmerId,
+      agentId: first.product.agentId,
     );
     if (ok) ref.read(cartProvider.notifier).clear();
     return ok;

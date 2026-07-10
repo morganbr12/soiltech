@@ -10,6 +10,7 @@ import '../../../../../shared/widgets/rating_widget.dart';
 import '../../../../../shared/widgets/section_header.dart';
 import '../../../../../shared/widgets/product_card.dart';
 import '../../../../../shared/widgets/shimmer_loader.dart';
+import '../../../cart/cart_provider.dart';
 import '../../../home/presentation/providers/home_providers.dart';
 import '../../../orders/presentation/providers/orders_provider.dart';
 import '../../../chats/data/chats_repository.dart';
@@ -80,12 +81,23 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   ),
                 ),
               ),
-              Container(
-                margin: const EdgeInsets.fromLTRB(0, 8, 12, 8),
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), shape: BoxShape.circle),
-                child: const Icon(Icons.share_outlined, color: Colors.black87, size: 20),
+              GestureDetector(
+                onTap: () => context.push('/customer/cart'),
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(0, 8, 12, 8),
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), shape: BoxShape.circle),
+                  child: Builder(builder: (ctx) {
+                    final count = ref.watch(cartItemCountProvider);
+                    return Badge(
+                      isLabelVisible: count > 0,
+                      label: Text(count > 9 ? '9+' : '$count', style: const TextStyle(fontSize: 9)),
+                      backgroundColor: AppColors.primary,
+                      child: const Icon(Icons.shopping_cart_outlined, color: Colors.black87, size: 20),
+                    );
+                  }),
+                ),
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
@@ -203,12 +215,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       const SizedBox(height: 14),
                       RatingWidget(rating: p.averageRating, reviewCount: p.reviewCount),
                       const SizedBox(height: 16),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
                         children: [
                           _InfoPill(icon: Icons.inventory_2_outlined, label: '${p.stockQuantity} ${p.unit} left', color: AppColors.info),
-                          const SizedBox(width: 8),
                           _InfoPill(icon: Icons.location_on_outlined, label: p.location.split(',').first.trim(), color: AppColors.tertiary),
-                          const SizedBox(width: 8),
                           _InfoPill(icon: Icons.eco_outlined, label: p.freshnessLabel, color: AppColors.success),
                         ],
                       ),
@@ -249,50 +261,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     ],
                   ),
                 ).animate(delay: 50.ms).fadeIn(),
-
-                // ── Seller info ─────────────────────────────────────────────
-                Container(
-                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.cardDark : Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: AppColors.primaryContainer,
-                        child: Text(p.farmerName.isNotEmpty ? p.farmerName[0] : '?',
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.primary)),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(p.farmerName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                            const SizedBox(height: 2),
-                            Text(
-                              p.location,
-                              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
-                            ),
-                          ],
-                        ),
-                      ),
-                      OutlinedButton(
-                        onPressed: () {},
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppColors.primary),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          minimumSize: Size.zero,
-                        ),
-                        child: const Text('Chat', style: TextStyle(fontSize: 12, color: AppColors.primary)),
-                      ),
-                    ],
-                  ),
-                ).animate(delay: 100.ms).fadeIn(),
 
                 // ── Description ─────────────────────────────────────────────
                 Container(
@@ -591,10 +559,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             : () async {
                                 if (!formKey.currentState!.validate()) return;
                                 final success = await ref.read(placeOrderProvider.notifier).placeOrder(
-                                  deliveryAddress: addressCtrl.text.trim(),
-                                  items: [{'productId': p.id, 'quantity': _quantity.round()}],
-                                  notes: notesCtrl.text.trim(),
+                                  produce: p.name,
+                                  quantityKg: _quantity,
+                                  pricePerKg: p.pricePerUnit,
                                   paymentType: _orderPaymentType,
+                                  farmerId: p.farmerId,
+                                  agentId: p.agentId,
                                 );
                                 if (!context.mounted) return;
                                 Navigator.of(ctx).pop();
@@ -642,12 +612,24 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   }
 
   void _showAddToCartSnackBar(BuildContext context, Product p) {
+    ref.read(cartProvider.notifier).add(p);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${p.name} (${_quantity.toStringAsFixed(1)} ${p.unit}) added to cart'),
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 10),
+            Expanded(child: Text('${p.name} added to cart')),
+          ],
+        ),
         backgroundColor: AppColors.primary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        action: SnackBarAction(
+          label: 'View Cart',
+          textColor: Colors.white,
+          onPressed: () => context.push('/customer/cart'),
+        ),
       ),
     );
   }

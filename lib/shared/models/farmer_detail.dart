@@ -15,6 +15,7 @@ class FarmerDetail {
   final String lbcName;
   final String region;
   final String district;
+  final String community;
   final int farmsCount;
   final double totalFarmSize;
   final List<String> cropTypes;
@@ -44,6 +45,7 @@ class FarmerDetail {
     required this.lbcName,
     required this.region,
     required this.district,
+    required this.community,
     required this.farmsCount,
     required this.totalFarmSize,
     required this.cropTypes,
@@ -81,6 +83,7 @@ class FarmerDetail {
       lbcName: json['lbcName'] as String? ?? '',
       region: json['region'] as String? ?? '',
       district: json['district'] as String? ?? '',
+      community: json['community'] as String? ?? '',
       farmsCount: (json['farmsCount'] as num?)?.toInt() ?? 0,
       totalFarmSize: (json['totalFarmSize'] as num?)?.toDouble() ?? 0.0,
       cropTypes: (json['cropTypes'] as List<dynamic>?)?.cast<String>() ?? [],

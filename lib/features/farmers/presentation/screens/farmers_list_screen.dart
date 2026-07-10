@@ -401,7 +401,7 @@ class _FarmerCard extends StatelessWidget {
                       const SizedBox(width: 3),
                       Expanded(
                         child: Text(
-                          '${farmer.district}, ${farmer.region}',
+                          '${farmer.community.isNotEmpty ? '${farmer.community}, ' : ''}${farmer.district}',
                           style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

@@ -1,11 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../../app/core/constants/app_constants.dart';
 import '../../../../app/core/theme/app_colors.dart';
@@ -31,8 +28,9 @@ class _FarmRegistrationScreenState extends ConsumerState<FarmRegistrationScreen>
   // Fields
   final _nameController = TextEditingController();
   final _sizeController = TextEditingController();
-  final _locationController = TextEditingController();
-  String? _selectedCropType;
+  final _districtController = TextEditingController();
+  final _communityController = TextEditingController();
+  final Set<String> _selectedCrops = {};
 
   // GPS
   bool _isCapturingGps = false;
@@ -40,15 +38,12 @@ class _FarmRegistrationScreenState extends ConsumerState<FarmRegistrationScreen>
   double? _longitude;
   String? _gpsError;
 
-  // Photos
-  final List<XFile> _photos = [];
-  final _picker = ImagePicker();
-
   @override
   void dispose() {
     _nameController.dispose();
     _sizeController.dispose();
-    _locationController.dispose();
+    _districtController.dispose();
+    _communityController.dispose();
     super.dispose();
   }
 
@@ -83,41 +78,26 @@ class _FarmRegistrationScreenState extends ConsumerState<FarmRegistrationScreen>
 
   void _clearGps() => setState(() { _latitude = null; _longitude = null; _gpsError = null; });
 
-  // ── Photos ─────────────────────────────────────────────────────────────────
-
-  Future<void> _pickPhotos() async {
-    final images = await _picker.pickMultiImage(imageQuality: 80);
-    if (images.isNotEmpty) {
-      setState(() => _photos.addAll(images));
-    }
-  }
-
-  void _removePhoto(int index) => setState(() => _photos.removeAt(index));
-
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_selectedCropType == null) {
-      setState(() => _errorMessage = 'Please select a crop type');
-      return;
-    }
     setState(() { _isLoading = true; _errorMessage = null; });
 
     try {
       await ref.read(farmsRepositoryProvider).registerFarm(
         farmerId: widget.farmerId,
         name: _nameController.text.trim(),
-        sizeHectares: double.parse(_sizeController.text.trim()),
-        cropType: _selectedCropType!,
-        location: _locationController.text.trim(),
+        district: _districtController.text.trim(),
+        community: _communityController.text.trim(),
+        sizeAcres: double.parse(_sizeController.text.trim()),
+        cropTypes: _selectedCrops.toList(),
         latitude: _latitude,
         longitude: _longitude,
-        photos: _photos,
       );
 
-      // Refresh the farmer profile so farmsCount updates
       ref.invalidate(farmerDetailProvider(widget.farmerId));
+      ref.invalidate(farmerFarmsProvider(widget.farmerId));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -206,7 +186,7 @@ class _FarmRegistrationScreenState extends ConsumerState<FarmRegistrationScreen>
               ).animate(delay: 100.ms).fadeIn(),
               const SizedBox(height: 14),
               AppTextField(
-                label: 'Farm Size (hectares)',
+                label: 'Farm Size (acres)',
                 hint: 'e.g. 2.5',
                 controller: _sizeController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -218,34 +198,48 @@ class _FarmRegistrationScreenState extends ConsumerState<FarmRegistrationScreen>
                   return null;
                 },
               ).animate(delay: 120.ms).fadeIn(),
-              const SizedBox(height: 14),
-              AppTextField(
-                label: 'Location',
-                hint: 'e.g. Ashanti, Kumasi',
-                controller: _locationController,
-                prefixIcon: Icons.place_outlined,
-                textCapitalization: TextCapitalization.words,
-                textInputAction: TextInputAction.done,
-                validator: (v) => v?.trim().isEmpty == true ? 'Location required' : null,
-              ).animate(delay: 140.ms).fadeIn(),
               const SizedBox(height: 24),
 
-              // ── Crop type (single) ────────────────────────────────────────
-              _SectionLabel('Crop Type').animate(delay: 160.ms).fadeIn(),
+              // ── Location ──────────────────────────────────────────────────
+              _SectionLabel('Location').animate(delay: 140.ms).fadeIn(),
+              const SizedBox(height: 12),
+              AppTextField(
+                label: 'District',
+                hint: 'e.g. Ejisu-Juaben',
+                controller: _districtController,
+                prefixIcon: Icons.location_city_outlined,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                validator: (v) => v?.trim().isEmpty == true ? 'District required' : null,
+              ).animate(delay: 160.ms).fadeIn(),
+              const SizedBox(height: 14),
+              AppTextField(
+                label: 'Community',
+                hint: 'e.g. Adum',
+                controller: _communityController,
+                prefixIcon: Icons.holiday_village_outlined,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.done,
+                validator: (v) => v?.trim().isEmpty == true ? 'Community required' : null,
+              ).animate(delay: 180.ms).fadeIn(),
+              const SizedBox(height: 24),
+
+              // ── Crop types (multi-select) ──────────────────────────────────
+              _SectionLabel('Crop Types (Optional)').animate(delay: 200.ms).fadeIn(),
               const SizedBox(height: 4),
               Text(
-                'Select the primary crop for this farm',
+                'Select all crops grown on this farm',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ).animate(delay: 170.ms).fadeIn(),
+              ).animate(delay: 210.ms).fadeIn(),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
                 children: AppConstants.cropTypes.asMap().entries.map((e) {
                   final crop = e.value;
-                  final isSelected = _selectedCropType == crop;
+                  final isSelected = _selectedCrops.contains(crop);
                   return GestureDetector(
-                    onTap: () => setState(() { _selectedCropType = crop; _errorMessage = null; }),
+                    onTap: () => setState(() => isSelected ? _selectedCrops.remove(crop) : _selectedCrops.add(crop)),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -277,13 +271,30 @@ class _FarmRegistrationScreenState extends ConsumerState<FarmRegistrationScreen>
                         ],
                       ),
                     ),
-                  ).animate(delay: Duration(milliseconds: 180 + 40 * e.key)).fadeIn();
+                  ).animate(delay: Duration(milliseconds: 220 + 40 * e.key)).fadeIn();
                 }).toList(),
               ),
+              if (_selectedCrops.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppColors.successLight, borderRadius: BorderRadius.circular(12)),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, size: 16, color: AppColors.success),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_selectedCrops.length} crop${_selectedCrops.length > 1 ? 's' : ''} selected',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.success),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(duration: 300.ms),
+              ],
               const SizedBox(height: 24),
 
               // ── GPS location ──────────────────────────────────────────────
-              _SectionLabel('GPS Coordinates (Optional)').animate(delay: 320.ms).fadeIn(),
+              _SectionLabel('GPS Coordinates (Optional)').animate(delay: 360.ms).fadeIn(),
               const SizedBox(height: 12),
               _GpsCard(
                 isDark: isDark,
@@ -294,29 +305,8 @@ class _FarmRegistrationScreenState extends ConsumerState<FarmRegistrationScreen>
                 error: _gpsError,
                 onCapture: _captureGps,
                 onClear: _clearGps,
-              ).animate(delay: 340.ms).fadeIn(),
-              const SizedBox(height: 24),
-
-              // ── Farm photos ───────────────────────────────────────────────
-              Row(
-                children: [
-                  _SectionLabel('Farm Photos (Optional)'),
-                  const Spacer(),
-                  if (_photos.isNotEmpty)
-                    Text(
-                      '${_photos.length} selected',
-                      style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
-                    ),
-                ],
-              ).animate(delay: 360.ms).fadeIn(),
-              const SizedBox(height: 12),
-              _PhotoGrid(
-                photos: _photos,
-                onAdd: _pickPhotos,
-                onRemove: _removePhoto,
-                isDark: isDark,
               ).animate(delay: 380.ms).fadeIn(),
-              const SizedBox(height: 28),
+              const SizedBox(height: 32),
 
               // ── Error ─────────────────────────────────────────────────────
               if (_errorMessage != null)
@@ -474,86 +464,6 @@ class _GpsCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ─── Photo grid ───────────────────────────────────────────────────────────────
-
-class _PhotoGrid extends StatelessWidget {
-  final List<XFile> photos;
-  final VoidCallback onAdd;
-  final void Function(int) onRemove;
-  final bool isDark;
-
-  const _PhotoGrid({
-    required this.photos,
-    required this.onAdd,
-    required this.onRemove,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        // Thumbnails
-        ...photos.asMap().entries.map((e) {
-          return Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  File(e.value.path),
-                  width: 80,
-                  height: 80,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              Positioned(
-                top: 4,
-                right: 4,
-                child: GestureDetector(
-                  onTap: () => onRemove(e.key),
-                  child: Container(
-                    width: 22,
-                    height: 22,
-                    decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                    child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
-                  ),
-                ),
-              ),
-            ],
-          );
-        }),
-
-        // Add button
-        GestureDetector(
-          onTap: onAdd,
-          child: Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: AppColors.primaryContainer.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.4),
-                style: BorderStyle.solid,
-              ),
-            ),
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.add_a_photo_outlined, color: AppColors.primary, size: 22),
-                SizedBox(height: 4),
-                Text('Add Photo', style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

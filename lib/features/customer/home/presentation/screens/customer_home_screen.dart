@@ -25,11 +25,13 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
   final _searchController = TextEditingController();
   int _bannerPage = 0;
   final _bannerController = PageController();
+  final _searchFocus = FocusNode();
 
   @override
   void dispose() {
     _searchController.dispose();
     _bannerController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -55,11 +57,15 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     final authState = ref.watch(authProvider);
-    final firstName = authState.fullName?.split(' ').first ?? 'there';
     final cachedImageUrl = authState.profileImageUrl;
 
     final profileAsync = ref.watch(customerProfileProvider);
+    // Prefer the live profile name (from /customer/me) over the JWT-decoded one
+    final firstName = profileAsync.valueOrNull?.fullName.split(' ').first
+        ?? authState.fullName?.split(' ').first
+        ?? 'there';
     final selectedCategoryId = ref.watch(selectedCategoryIdProvider);
+    final searchQuery = ref.watch(searchQueryProvider);
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
@@ -70,21 +76,25 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
         slivers: [
           // ─── App Bar ──────────────────────────────────────────────────────────
           SliverAppBar(
-            expandedHeight: 140,
+            expandedHeight: MediaQuery.of(context).padding.top + kToolbarHeight + 124,
             floating: true,
             snap: true,
             pinned: false,
             elevation: 0,
+            automaticallyImplyLeading: false,
             backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F7F5),
             flexibleSpace: FlexibleSpaceBar(
               collapseMode: CollapseMode.none,
               background: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-                child: SafeArea(
-                  child: Column(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  MediaQuery.of(context).padding.top + kToolbarHeight + 8,
+                  20,
+                  12,
+                ),
+                child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 8),
                       Row(
                         children: [
                           Expanded(
@@ -258,36 +268,54 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                       const SizedBox(height: 14),
 
                       // Search bar
-                      GestureDetector(
-                        onTap: () {},
-                        child: Container(
-                          height: 46,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: isDark ? AppColors.cardDark : Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
-                                blurRadius: 12,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.search_rounded, size: 20, color: AppColors.primaryLight),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Search tomatoes, onions, pepper...',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
+                      Container(
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.cardDark : Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
+                              blurRadius: 12,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 14),
+                            const Icon(Icons.search_rounded, size: 20, color: AppColors.primaryLight),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                focusNode: _searchFocus,
+                                onChanged: (v) => ref.read(searchQueryProvider.notifier).state = v,
+                                style: const TextStyle(fontSize: 13),
+                                decoration: InputDecoration(
+                                  hintText: 'Search tomatoes, onions, pepper...',
+                                  hintStyle: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
                                 ),
                               ),
+                            ),
+                            if (ref.watch(searchQueryProvider).isNotEmpty)
+                              GestureDetector(
+                                onTap: () {
+                                  _searchController.clear();
+                                  ref.read(searchQueryProvider.notifier).state = '';
+                                  _searchFocus.unfocus();
+                                },
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 10),
+                                  child: Icon(Icons.close_rounded, size: 18, color: AppColors.primaryLight),
+                                ),
+                              )
+                            else
                               Container(
+                                margin: const EdgeInsets.only(right: 8),
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: AppColors.primary.withValues(alpha: 0.1),
@@ -295,8 +323,7 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                                 ),
                                 child: const Icon(Icons.tune_rounded, size: 16, color: AppColors.primary),
                               ),
-                            ],
-                          ),
+                          ],
                         ),
                       ).animate(delay: 100.ms).fadeIn().slideY(begin: 0.05, end: 0),
                     ],
@@ -304,8 +331,13 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                 ),
               ),
             ),
-          ),
 
+          // ── Search results (replaces all sections when query is active) ────
+          if (searchQuery.isNotEmpty)
+            SliverToBoxAdapter(
+              child: _SearchResultsSection(query: searchQuery),
+            )
+          else
           SliverToBoxAdapter(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -677,6 +709,86 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
         duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+}
+
+// ─── Search results ───────────────────────────────────────────────────────────
+
+class _SearchResultsSection extends ConsumerWidget {
+  final String query;
+  const _SearchResultsSection({required this.query});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resultsAsync = ref.watch(searchResultsProvider(query));
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+      child: resultsAsync.when(
+        loading: () => Column(
+          children: List.generate(
+            4,
+            (_) => const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: ShimmerBox(width: double.infinity, height: 90, radius: 16),
+            ),
+          ),
+        ),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 40),
+            child: Text('Search failed: $e', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 13)),
+          ),
+        ),
+        data: (products) => products.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.only(top: 60),
+                child: Column(
+                  children: [
+                    const Icon(Icons.search_off_rounded, size: 52, color: AppColors.primaryLight),
+                    const SizedBox(height: 16),
+                    Text('No results for "$query"',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                    const SizedBox(height: 6),
+                    Text('Try a different keyword',
+                        style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant)),
+                  ],
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${products.length} result${products.length != 1 ? 's' : ''} for "$query"',
+                    style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 14),
+                  ...products.map((p) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: ProductCard(
+                      product: p,
+                      horizontal: true,
+                      onTap: () => GoRouter.of(context).push('/product/${p.id}'),
+                      onAddToCart: () {
+                        ref.read(cartProvider.notifier).add(p);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${p.name} added to cart'),
+                            backgroundColor: AppColors.primary,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                  )),
+                ],
+              ),
       ),
     );
   }

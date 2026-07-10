@@ -31,8 +31,8 @@ class _RegisterFarmerScreenState extends ConsumerState<RegisterFarmerScreen> {
   final _nationalIdController = TextEditingController();
 
   // Step 2 — Location
-  String? _selectedRegion;
   final _districtController = TextEditingController();
+  final _communityController = TextEditingController();
 
   // Step 3 — Crops
   final Set<String> _selectedCrops = {};
@@ -45,6 +45,7 @@ class _RegisterFarmerScreenState extends ConsumerState<RegisterFarmerScreen> {
     _emailController.dispose();
     _nationalIdController.dispose();
     _districtController.dispose();
+    _communityController.dispose();
     super.dispose();
   }
 
@@ -57,14 +58,14 @@ class _RegisterFarmerScreenState extends ConsumerState<RegisterFarmerScreen> {
         'firstName': _firstNameController.text.trim(),
         'lastName': _lastNameController.text.trim(),
         'phone': _phoneController.text.trim(),
-        'region': _selectedRegion!,
         'district': _districtController.text.trim(),
+        'community': _communityController.text.trim(),
         if (_emailController.text.trim().isNotEmpty)
           'email': _emailController.text.trim(),
         if (_nationalIdController.text.trim().isNotEmpty)
           'nationalId': _nationalIdController.text.trim(),
         if (_selectedCrops.isNotEmpty)
-          'cropTypes': _selectedCrops.map((c) => c.toLowerCase()).toList(),
+          'cropTypes': _selectedCrops.map((c) => c.toUpperCase()).toList(),
       };
 
       await ref.read(farmersRepositoryProvider).createFarmer(body);
@@ -337,39 +338,24 @@ class _RegisterFarmerScreenState extends ConsumerState<RegisterFarmerScreen> {
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant))
               .animate().fadeIn(duration: 300.ms),
           const SizedBox(height: 24),
-          DropdownButtonFormField<String>(
-            value: _selectedRegion,
-            decoration: InputDecoration(
-              labelText: 'Region',
-              prefixIcon: const Icon(Icons.map_outlined, size: 20),
-              filled: true,
-              fillColor: theme.brightness == Brightness.dark ? const Color(0xFF1E2E20) : const Color(0xFFF0F6F1),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: theme.brightness == Brightness.dark ? const Color(0xFF2A3A2A) : const Color(0xFFD4E4D4),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: AppColors.primary, width: 2),
-              ),
-            ),
-            items: AppConstants.regions
-                .map((r) => DropdownMenuItem(value: r, child: Text(r, style: const TextStyle(fontSize: 14))))
-                .toList(),
-            onChanged: (v) => setState(() => _selectedRegion = v),
-            validator: (v) => v == null ? 'Please select a region' : null,
-          ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
-          const SizedBox(height: 14),
           AppTextField(
             label: 'District',
             hint: 'e.g. Ejisu-Juaben',
             controller: _districtController,
             prefixIcon: Icons.location_city_outlined,
             textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.next,
             validator: (v) => v?.trim().isEmpty == true ? 'District required' : null,
+          ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
+          const SizedBox(height: 14),
+          AppTextField(
+            label: 'Community',
+            hint: 'e.g. Adum',
+            controller: _communityController,
+            prefixIcon: Icons.holiday_village_outlined,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.done,
+            validator: (v) => v?.trim().isEmpty == true ? 'Community required' : null,
           ).animate(delay: 150.ms).fadeIn(duration: 300.ms),
         ],
       ),

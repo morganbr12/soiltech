@@ -33,11 +33,19 @@ final recentProductsProvider =
 // null = All categories
 final selectedCategoryIdProvider = StateProvider<String?>((ref) => null);
 
+final searchQueryProvider = StateProvider<String>((ref) => '');
+
 final popularProductsProvider =
     FutureProvider.autoDispose.family<List<Product>, String?>((ref, categoryId) {
   return ref
       .read(productsRepositoryProvider)
       .getProducts(categoryId: categoryId);
+});
+
+final searchResultsProvider =
+    FutureProvider.autoDispose.family<List<Product>, String>((ref, query) {
+  if (query.trim().isEmpty) return Future.value([]);
+  return ref.read(productsRepositoryProvider).getProducts(query: query.trim());
 });
 
 final productDetailProvider =

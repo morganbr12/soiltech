@@ -6,11 +6,6 @@ final allOrdersProvider = FutureProvider<List<CustomerOrder>>((ref) {
   return ref.read(ordersRepositoryProvider).getOrders();
 });
 
-final orderDetailProvider =
-    FutureProvider.family<CustomerOrder, String>((ref, id) {
-  return ref.read(ordersRepositoryProvider).getOrder(id);
-});
-
 class PlaceOrderNotifier extends StateNotifier<AsyncValue<CustomerOrder?>> {
   final OrdersRepository _repo;
   final Ref _ref;
@@ -18,18 +13,22 @@ class PlaceOrderNotifier extends StateNotifier<AsyncValue<CustomerOrder?>> {
   PlaceOrderNotifier(this._repo, this._ref) : super(const AsyncValue.data(null));
 
   Future<bool> placeOrder({
-    required String deliveryAddress,
-    required List<Map<String, dynamic>> items,
-    String? notes,
+    required String produce,
+    required double quantityKg,
+    required double pricePerKg,
     String paymentType = 'CASH',
+    String? farmerId,
+    String? agentId,
   }) async {
     state = const AsyncValue.loading();
     try {
       final order = await _repo.placeOrder({
-        'deliveryAddress': deliveryAddress,
-        'items': items,
+        'produce': produce.toUpperCase(),
+        'quantityKg': quantityKg,
+        'pricePerKg': pricePerKg,
         'paymentType': paymentType,
-        if (notes != null && notes.isNotEmpty) 'notes': notes,
+        if (farmerId != null) 'farmerId': farmerId,
+        if (agentId != null) 'agentId': agentId,
       });
       state = AsyncValue.data(order);
       _ref.invalidate(allOrdersProvider);
