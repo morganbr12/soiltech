@@ -21,6 +21,7 @@ abstract class Product with _$Product {
     String? farmerId,
     String? agentId,
     required String farmerName,
+    @Default('') String agentName,
     @Default('') String location,
     @Default('') String freshnessLabel,
     @Default(0.0) double averageRating,

@@ -42,6 +42,7 @@ class ProductsRepository {
     if (categoryId != null) params['category_id'] = categoryId;
     if (query != null && query.isNotEmpty) params['query'] = query;
     final res = await _dio.get('/products', queryParameters: params);
+    appLogger.d('[Products] raw response: ${res.data}');
     return _parseProductList(res.data);
   }
 

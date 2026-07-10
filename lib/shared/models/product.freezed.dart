@@ -16,7 +16,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Product {
 
- String get id; String get name; String get description; String get imageUrl; List<String> get galleryImages; double get pricePerUnit; String get unit; int get stockQuantity; String get categoryId; String? get produceListingId; String get farmerName; String get location; String get freshnessLabel; double get averageRating; int get reviewCount; bool get isFeatured; bool get isOnDeal; bool get isAvailable; double? get originalPrice; DateTime? get createdAt; DateTime? get updatedAt;
+ String get id; String get name; String get description; String get imageUrl; List<String> get galleryImages; double get pricePerUnit; String get unit; int get stockQuantity; String get categoryId; String? get produceListingId; String? get farmerId; String? get agentId; String get farmerName; String get agentName; String get location; String get freshnessLabel; double get averageRating; int get reviewCount; bool get isFeatured; bool get isOnDeal; bool get isAvailable; double? get originalPrice; DateTime? get createdAt; DateTime? get updatedAt;
 /// Create a copy of Product
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -29,16 +29,16 @@ $ProductCopyWith<Product> get copyWith => _$ProductCopyWithImpl<Product>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Product&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.imageUrl, imageUrl) || other.imageUrl == imageUrl)&&const DeepCollectionEquality().equals(other.galleryImages, galleryImages)&&(identical(other.pricePerUnit, pricePerUnit) || other.pricePerUnit == pricePerUnit)&&(identical(other.unit, unit) || other.unit == unit)&&(identical(other.stockQuantity, stockQuantity) || other.stockQuantity == stockQuantity)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&(identical(other.produceListingId, produceListingId) || other.produceListingId == produceListingId)&&(identical(other.farmerName, farmerName) || other.farmerName == farmerName)&&(identical(other.location, location) || other.location == location)&&(identical(other.freshnessLabel, freshnessLabel) || other.freshnessLabel == freshnessLabel)&&(identical(other.averageRating, averageRating) || other.averageRating == averageRating)&&(identical(other.reviewCount, reviewCount) || other.reviewCount == reviewCount)&&(identical(other.isFeatured, isFeatured) || other.isFeatured == isFeatured)&&(identical(other.isOnDeal, isOnDeal) || other.isOnDeal == isOnDeal)&&(identical(other.isAvailable, isAvailable) || other.isAvailable == isAvailable)&&(identical(other.originalPrice, originalPrice) || other.originalPrice == originalPrice)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Product&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.imageUrl, imageUrl) || other.imageUrl == imageUrl)&&const DeepCollectionEquality().equals(other.galleryImages, galleryImages)&&(identical(other.pricePerUnit, pricePerUnit) || other.pricePerUnit == pricePerUnit)&&(identical(other.unit, unit) || other.unit == unit)&&(identical(other.stockQuantity, stockQuantity) || other.stockQuantity == stockQuantity)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&(identical(other.produceListingId, produceListingId) || other.produceListingId == produceListingId)&&(identical(other.farmerId, farmerId) || other.farmerId == farmerId)&&(identical(other.agentId, agentId) || other.agentId == agentId)&&(identical(other.farmerName, farmerName) || other.farmerName == farmerName)&&(identical(other.agentName, agentName) || other.agentName == agentName)&&(identical(other.location, location) || other.location == location)&&(identical(other.freshnessLabel, freshnessLabel) || other.freshnessLabel == freshnessLabel)&&(identical(other.averageRating, averageRating) || other.averageRating == averageRating)&&(identical(other.reviewCount, reviewCount) || other.reviewCount == reviewCount)&&(identical(other.isFeatured, isFeatured) || other.isFeatured == isFeatured)&&(identical(other.isOnDeal, isOnDeal) || other.isOnDeal == isOnDeal)&&(identical(other.isAvailable, isAvailable) || other.isAvailable == isAvailable)&&(identical(other.originalPrice, originalPrice) || other.originalPrice == originalPrice)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hashAll([runtimeType,id,name,description,imageUrl,const DeepCollectionEquality().hash(galleryImages),pricePerUnit,unit,stockQuantity,categoryId,produceListingId,farmerName,location,freshnessLabel,averageRating,reviewCount,isFeatured,isOnDeal,isAvailable,originalPrice,createdAt,updatedAt]);
+int get hashCode => Object.hashAll([runtimeType,id,name,description,imageUrl,const DeepCollectionEquality().hash(galleryImages),pricePerUnit,unit,stockQuantity,categoryId,produceListingId,farmerId,agentId,farmerName,agentName,location,freshnessLabel,averageRating,reviewCount,isFeatured,isOnDeal,isAvailable,originalPrice,createdAt,updatedAt]);
 
 @override
 String toString() {
-  return 'Product(id: $id, name: $name, description: $description, imageUrl: $imageUrl, galleryImages: $galleryImages, pricePerUnit: $pricePerUnit, unit: $unit, stockQuantity: $stockQuantity, categoryId: $categoryId, produceListingId: $produceListingId, farmerName: $farmerName, location: $location, freshnessLabel: $freshnessLabel, averageRating: $averageRating, reviewCount: $reviewCount, isFeatured: $isFeatured, isOnDeal: $isOnDeal, isAvailable: $isAvailable, originalPrice: $originalPrice, createdAt: $createdAt, updatedAt: $updatedAt)';
+  return 'Product(id: $id, name: $name, description: $description, imageUrl: $imageUrl, galleryImages: $galleryImages, pricePerUnit: $pricePerUnit, unit: $unit, stockQuantity: $stockQuantity, categoryId: $categoryId, produceListingId: $produceListingId, farmerId: $farmerId, agentId: $agentId, farmerName: $farmerName, agentName: $agentName, location: $location, freshnessLabel: $freshnessLabel, averageRating: $averageRating, reviewCount: $reviewCount, isFeatured: $isFeatured, isOnDeal: $isOnDeal, isAvailable: $isAvailable, originalPrice: $originalPrice, createdAt: $createdAt, updatedAt: $updatedAt)';
 }
 
 
@@ -49,7 +49,7 @@ abstract mixin class $ProductCopyWith<$Res>  {
   factory $ProductCopyWith(Product value, $Res Function(Product) _then) = _$ProductCopyWithImpl;
 @useResult
 $Res call({
- String id, String name, String description, String imageUrl, List<String> galleryImages, double pricePerUnit, String unit, int stockQuantity, String categoryId, String? produceListingId, String farmerName, String location, String freshnessLabel, double averageRating, int reviewCount, bool isFeatured, bool isOnDeal, bool isAvailable, double? originalPrice, DateTime? createdAt, DateTime? updatedAt
+ String id, String name, String description, String imageUrl, List<String> galleryImages, double pricePerUnit, String unit, int stockQuantity, String categoryId, String? produceListingId, String? farmerId, String? agentId, String farmerName, String agentName, String location, String freshnessLabel, double averageRating, int reviewCount, bool isFeatured, bool isOnDeal, bool isAvailable, double? originalPrice, DateTime? createdAt, DateTime? updatedAt
 });
 
 
@@ -66,7 +66,7 @@ class _$ProductCopyWithImpl<$Res>
 
 /// Create a copy of Product
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? description = null,Object? imageUrl = null,Object? galleryImages = null,Object? pricePerUnit = null,Object? unit = null,Object? stockQuantity = null,Object? categoryId = null,Object? produceListingId = freezed,Object? farmerName = null,Object? location = null,Object? freshnessLabel = null,Object? averageRating = null,Object? reviewCount = null,Object? isFeatured = null,Object? isOnDeal = null,Object? isAvailable = null,Object? originalPrice = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? description = null,Object? imageUrl = null,Object? galleryImages = null,Object? pricePerUnit = null,Object? unit = null,Object? stockQuantity = null,Object? categoryId = null,Object? produceListingId = freezed,Object? farmerId = freezed,Object? agentId = freezed,Object? farmerName = null,Object? agentName = null,Object? location = null,Object? freshnessLabel = null,Object? averageRating = null,Object? reviewCount = null,Object? isFeatured = null,Object? isOnDeal = null,Object? isAvailable = null,Object? originalPrice = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,}) {
   return _then(Product(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -78,7 +78,10 @@ as double,unit: null == unit ? _self.unit : unit // ignore: cast_nullable_to_non
 as String,stockQuantity: null == stockQuantity ? _self.stockQuantity : stockQuantity // ignore: cast_nullable_to_non_nullable
 as int,categoryId: null == categoryId ? _self.categoryId : categoryId // ignore: cast_nullable_to_non_nullable
 as String,produceListingId: freezed == produceListingId ? _self.produceListingId : produceListingId // ignore: cast_nullable_to_non_nullable
+as String?,farmerId: freezed == farmerId ? _self.farmerId : farmerId // ignore: cast_nullable_to_non_nullable
+as String?,agentId: freezed == agentId ? _self.agentId : agentId // ignore: cast_nullable_to_non_nullable
 as String?,farmerName: null == farmerName ? _self.farmerName : farmerName // ignore: cast_nullable_to_non_nullable
+as String,agentName: null == agentName ? _self.agentName : agentName // ignore: cast_nullable_to_non_nullable
 as String,location: null == location ? _self.location : location // ignore: cast_nullable_to_non_nullable
 as String,freshnessLabel: null == freshnessLabel ? _self.freshnessLabel : freshnessLabel // ignore: cast_nullable_to_non_nullable
 as String,averageRating: null == averageRating ? _self.averageRating : averageRating // ignore: cast_nullable_to_non_nullable
@@ -174,10 +177,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String description,  String imageUrl,  List<String> galleryImages,  double pricePerUnit,  String unit,  int stockQuantity,  String categoryId,  String? produceListingId,  String farmerName,  String location,  String freshnessLabel,  double averageRating,  int reviewCount,  bool isFeatured,  bool isOnDeal,  bool isAvailable,  double? originalPrice,  DateTime? createdAt,  DateTime? updatedAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String description,  String imageUrl,  List<String> galleryImages,  double pricePerUnit,  String unit,  int stockQuantity,  String categoryId,  String? produceListingId,  String? farmerId,  String? agentId,  String farmerName,  String agentName,  String location,  String freshnessLabel,  double averageRating,  int reviewCount,  bool isFeatured,  bool isOnDeal,  bool isAvailable,  double? originalPrice,  DateTime? createdAt,  DateTime? updatedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Product() when $default != null:
-return $default(_that.id,_that.name,_that.description,_that.imageUrl,_that.galleryImages,_that.pricePerUnit,_that.unit,_that.stockQuantity,_that.categoryId,_that.produceListingId,_that.farmerName,_that.location,_that.freshnessLabel,_that.averageRating,_that.reviewCount,_that.isFeatured,_that.isOnDeal,_that.isAvailable,_that.originalPrice,_that.createdAt,_that.updatedAt);case _:
+return $default(_that.id,_that.name,_that.description,_that.imageUrl,_that.galleryImages,_that.pricePerUnit,_that.unit,_that.stockQuantity,_that.categoryId,_that.produceListingId,_that.farmerId,_that.agentId,_that.farmerName,_that.agentName,_that.location,_that.freshnessLabel,_that.averageRating,_that.reviewCount,_that.isFeatured,_that.isOnDeal,_that.isAvailable,_that.originalPrice,_that.createdAt,_that.updatedAt);case _:
   return orElse();
 
 }
@@ -195,10 +198,10 @@ return $default(_that.id,_that.name,_that.description,_that.imageUrl,_that.galle
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String description,  String imageUrl,  List<String> galleryImages,  double pricePerUnit,  String unit,  int stockQuantity,  String categoryId,  String? produceListingId,  String farmerName,  String location,  String freshnessLabel,  double averageRating,  int reviewCount,  bool isFeatured,  bool isOnDeal,  bool isAvailable,  double? originalPrice,  DateTime? createdAt,  DateTime? updatedAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String description,  String imageUrl,  List<String> galleryImages,  double pricePerUnit,  String unit,  int stockQuantity,  String categoryId,  String? produceListingId,  String? farmerId,  String? agentId,  String farmerName,  String agentName,  String location,  String freshnessLabel,  double averageRating,  int reviewCount,  bool isFeatured,  bool isOnDeal,  bool isAvailable,  double? originalPrice,  DateTime? createdAt,  DateTime? updatedAt)  $default,) {final _that = this;
 switch (_that) {
 case _Product():
-return $default(_that.id,_that.name,_that.description,_that.imageUrl,_that.galleryImages,_that.pricePerUnit,_that.unit,_that.stockQuantity,_that.categoryId,_that.produceListingId,_that.farmerName,_that.location,_that.freshnessLabel,_that.averageRating,_that.reviewCount,_that.isFeatured,_that.isOnDeal,_that.isAvailable,_that.originalPrice,_that.createdAt,_that.updatedAt);case _:
+return $default(_that.id,_that.name,_that.description,_that.imageUrl,_that.galleryImages,_that.pricePerUnit,_that.unit,_that.stockQuantity,_that.categoryId,_that.produceListingId,_that.farmerId,_that.agentId,_that.farmerName,_that.agentName,_that.location,_that.freshnessLabel,_that.averageRating,_that.reviewCount,_that.isFeatured,_that.isOnDeal,_that.isAvailable,_that.originalPrice,_that.createdAt,_that.updatedAt);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -215,10 +218,10 @@ return $default(_that.id,_that.name,_that.description,_that.imageUrl,_that.galle
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String description,  String imageUrl,  List<String> galleryImages,  double pricePerUnit,  String unit,  int stockQuantity,  String categoryId,  String? produceListingId,  String farmerName,  String location,  String freshnessLabel,  double averageRating,  int reviewCount,  bool isFeatured,  bool isOnDeal,  bool isAvailable,  double? originalPrice,  DateTime? createdAt,  DateTime? updatedAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String description,  String imageUrl,  List<String> galleryImages,  double pricePerUnit,  String unit,  int stockQuantity,  String categoryId,  String? produceListingId,  String? farmerId,  String? agentId,  String farmerName,  String agentName,  String location,  String freshnessLabel,  double averageRating,  int reviewCount,  bool isFeatured,  bool isOnDeal,  bool isAvailable,  double? originalPrice,  DateTime? createdAt,  DateTime? updatedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _Product() when $default != null:
-return $default(_that.id,_that.name,_that.description,_that.imageUrl,_that.galleryImages,_that.pricePerUnit,_that.unit,_that.stockQuantity,_that.categoryId,_that.produceListingId,_that.farmerName,_that.location,_that.freshnessLabel,_that.averageRating,_that.reviewCount,_that.isFeatured,_that.isOnDeal,_that.isAvailable,_that.originalPrice,_that.createdAt,_that.updatedAt);case _:
+return $default(_that.id,_that.name,_that.description,_that.imageUrl,_that.galleryImages,_that.pricePerUnit,_that.unit,_that.stockQuantity,_that.categoryId,_that.produceListingId,_that.farmerId,_that.agentId,_that.farmerName,_that.agentName,_that.location,_that.freshnessLabel,_that.averageRating,_that.reviewCount,_that.isFeatured,_that.isOnDeal,_that.isAvailable,_that.originalPrice,_that.createdAt,_that.updatedAt);case _:
   return null;
 
 }
@@ -230,7 +233,7 @@ return $default(_that.id,_that.name,_that.description,_that.imageUrl,_that.galle
 @JsonSerializable()
 
 class _Product extends Product {
-  const _Product({required this.id, required this.name, this.description = '', required this.imageUrl,  List<String> galleryImages = const [], required this.pricePerUnit, required this.unit, required this.stockQuantity, required this.categoryId, this.produceListingId, required this.farmerName, this.location = '', this.freshnessLabel = '', this.averageRating = 0.0, this.reviewCount = 0, this.isFeatured = false, this.isOnDeal = false, this.isAvailable = true, this.originalPrice, this.createdAt, this.updatedAt}): _galleryImages = galleryImages,super._();
+  const _Product({required this.id, required this.name, this.description = '', required this.imageUrl,  List<String> galleryImages = const [], required this.pricePerUnit, required this.unit, required this.stockQuantity, required this.categoryId, this.produceListingId, this.farmerId, this.agentId, required this.farmerName, this.agentName = '', this.location = '', this.freshnessLabel = '', this.averageRating = 0.0, this.reviewCount = 0, this.isFeatured = false, this.isOnDeal = false, this.isAvailable = true, this.originalPrice, this.createdAt, this.updatedAt}): _galleryImages = galleryImages,super._();
   factory _Product.fromJson(Map<String, dynamic> json) => _$ProductFromJson(json);
 
 @override final  String id;
@@ -249,7 +252,10 @@ class _Product extends Product {
 @override final  int stockQuantity;
 @override final  String categoryId;
 @override final  String? produceListingId;
+@override final  String? farmerId;
+@override final  String? agentId;
 @override final  String farmerName;
+@override@JsonKey() final  String agentName;
 @override@JsonKey() final  String location;
 @override@JsonKey() final  String freshnessLabel;
 @override@JsonKey() final  double averageRating;
@@ -274,16 +280,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Product&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.imageUrl, imageUrl) || other.imageUrl == imageUrl)&&const DeepCollectionEquality().equals(other._galleryImages, _galleryImages)&&(identical(other.pricePerUnit, pricePerUnit) || other.pricePerUnit == pricePerUnit)&&(identical(other.unit, unit) || other.unit == unit)&&(identical(other.stockQuantity, stockQuantity) || other.stockQuantity == stockQuantity)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&(identical(other.produceListingId, produceListingId) || other.produceListingId == produceListingId)&&(identical(other.farmerName, farmerName) || other.farmerName == farmerName)&&(identical(other.location, location) || other.location == location)&&(identical(other.freshnessLabel, freshnessLabel) || other.freshnessLabel == freshnessLabel)&&(identical(other.averageRating, averageRating) || other.averageRating == averageRating)&&(identical(other.reviewCount, reviewCount) || other.reviewCount == reviewCount)&&(identical(other.isFeatured, isFeatured) || other.isFeatured == isFeatured)&&(identical(other.isOnDeal, isOnDeal) || other.isOnDeal == isOnDeal)&&(identical(other.isAvailable, isAvailable) || other.isAvailable == isAvailable)&&(identical(other.originalPrice, originalPrice) || other.originalPrice == originalPrice)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Product&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.imageUrl, imageUrl) || other.imageUrl == imageUrl)&&const DeepCollectionEquality().equals(other._galleryImages, _galleryImages)&&(identical(other.pricePerUnit, pricePerUnit) || other.pricePerUnit == pricePerUnit)&&(identical(other.unit, unit) || other.unit == unit)&&(identical(other.stockQuantity, stockQuantity) || other.stockQuantity == stockQuantity)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&(identical(other.produceListingId, produceListingId) || other.produceListingId == produceListingId)&&(identical(other.farmerId, farmerId) || other.farmerId == farmerId)&&(identical(other.agentId, agentId) || other.agentId == agentId)&&(identical(other.farmerName, farmerName) || other.farmerName == farmerName)&&(identical(other.agentName, agentName) || other.agentName == agentName)&&(identical(other.location, location) || other.location == location)&&(identical(other.freshnessLabel, freshnessLabel) || other.freshnessLabel == freshnessLabel)&&(identical(other.averageRating, averageRating) || other.averageRating == averageRating)&&(identical(other.reviewCount, reviewCount) || other.reviewCount == reviewCount)&&(identical(other.isFeatured, isFeatured) || other.isFeatured == isFeatured)&&(identical(other.isOnDeal, isOnDeal) || other.isOnDeal == isOnDeal)&&(identical(other.isAvailable, isAvailable) || other.isAvailable == isAvailable)&&(identical(other.originalPrice, originalPrice) || other.originalPrice == originalPrice)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hashAll([runtimeType,id,name,description,imageUrl,const DeepCollectionEquality().hash(_galleryImages),pricePerUnit,unit,stockQuantity,categoryId,produceListingId,farmerName,location,freshnessLabel,averageRating,reviewCount,isFeatured,isOnDeal,isAvailable,originalPrice,createdAt,updatedAt]);
+int get hashCode => Object.hashAll([runtimeType,id,name,description,imageUrl,const DeepCollectionEquality().hash(_galleryImages),pricePerUnit,unit,stockQuantity,categoryId,produceListingId,farmerId,agentId,farmerName,agentName,location,freshnessLabel,averageRating,reviewCount,isFeatured,isOnDeal,isAvailable,originalPrice,createdAt,updatedAt]);
 
 @override
 String toString() {
-  return 'Product(id: $id, name: $name, description: $description, imageUrl: $imageUrl, galleryImages: $galleryImages, pricePerUnit: $pricePerUnit, unit: $unit, stockQuantity: $stockQuantity, categoryId: $categoryId, produceListingId: $produceListingId, farmerName: $farmerName, location: $location, freshnessLabel: $freshnessLabel, averageRating: $averageRating, reviewCount: $reviewCount, isFeatured: $isFeatured, isOnDeal: $isOnDeal, isAvailable: $isAvailable, originalPrice: $originalPrice, createdAt: $createdAt, updatedAt: $updatedAt)';
+  return 'Product(id: $id, name: $name, description: $description, imageUrl: $imageUrl, galleryImages: $galleryImages, pricePerUnit: $pricePerUnit, unit: $unit, stockQuantity: $stockQuantity, categoryId: $categoryId, produceListingId: $produceListingId, farmerId: $farmerId, agentId: $agentId, farmerName: $farmerName, agentName: $agentName, location: $location, freshnessLabel: $freshnessLabel, averageRating: $averageRating, reviewCount: $reviewCount, isFeatured: $isFeatured, isOnDeal: $isOnDeal, isAvailable: $isAvailable, originalPrice: $originalPrice, createdAt: $createdAt, updatedAt: $updatedAt)';
 }
 
 
@@ -294,7 +300,7 @@ abstract mixin class _$ProductCopyWith<$Res> implements $ProductCopyWith<$Res> {
   factory _$ProductCopyWith(_Product value, $Res Function(_Product) _then) = __$ProductCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String name, String description, String imageUrl, List<String> galleryImages, double pricePerUnit, String unit, int stockQuantity, String categoryId, String? produceListingId, String farmerName, String location, String freshnessLabel, double averageRating, int reviewCount, bool isFeatured, bool isOnDeal, bool isAvailable, double? originalPrice, DateTime? createdAt, DateTime? updatedAt
+ String id, String name, String description, String imageUrl, List<String> galleryImages, double pricePerUnit, String unit, int stockQuantity, String categoryId, String? produceListingId, String? farmerId, String? agentId, String farmerName, String agentName, String location, String freshnessLabel, double averageRating, int reviewCount, bool isFeatured, bool isOnDeal, bool isAvailable, double? originalPrice, DateTime? createdAt, DateTime? updatedAt
 });
 
 
@@ -311,7 +317,7 @@ class __$ProductCopyWithImpl<$Res>
 
 /// Create a copy of Product
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? description = null,Object? imageUrl = null,Object? galleryImages = null,Object? pricePerUnit = null,Object? unit = null,Object? stockQuantity = null,Object? categoryId = null,Object? produceListingId = freezed,Object? farmerName = null,Object? location = null,Object? freshnessLabel = null,Object? averageRating = null,Object? reviewCount = null,Object? isFeatured = null,Object? isOnDeal = null,Object? isAvailable = null,Object? originalPrice = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? description = null,Object? imageUrl = null,Object? galleryImages = null,Object? pricePerUnit = null,Object? unit = null,Object? stockQuantity = null,Object? categoryId = null,Object? produceListingId = freezed,Object? farmerId = freezed,Object? agentId = freezed,Object? farmerName = null,Object? agentName = null,Object? location = null,Object? freshnessLabel = null,Object? averageRating = null,Object? reviewCount = null,Object? isFeatured = null,Object? isOnDeal = null,Object? isAvailable = null,Object? originalPrice = freezed,Object? createdAt = freezed,Object? updatedAt = freezed,}) {
   return _then(_Product(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -323,7 +329,10 @@ as double,unit: null == unit ? _self.unit : unit // ignore: cast_nullable_to_non
 as String,stockQuantity: null == stockQuantity ? _self.stockQuantity : stockQuantity // ignore: cast_nullable_to_non_nullable
 as int,categoryId: null == categoryId ? _self.categoryId : categoryId // ignore: cast_nullable_to_non_nullable
 as String,produceListingId: freezed == produceListingId ? _self.produceListingId : produceListingId // ignore: cast_nullable_to_non_nullable
+as String?,farmerId: freezed == farmerId ? _self.farmerId : farmerId // ignore: cast_nullable_to_non_nullable
+as String?,agentId: freezed == agentId ? _self.agentId : agentId // ignore: cast_nullable_to_non_nullable
 as String?,farmerName: null == farmerName ? _self.farmerName : farmerName // ignore: cast_nullable_to_non_nullable
+as String,agentName: null == agentName ? _self.agentName : agentName // ignore: cast_nullable_to_non_nullable
 as String,location: null == location ? _self.location : location // ignore: cast_nullable_to_non_nullable
 as String,freshnessLabel: null == freshnessLabel ? _self.freshnessLabel : freshnessLabel // ignore: cast_nullable_to_non_nullable
 as String,averageRating: null == averageRating ? _self.averageRating : averageRating // ignore: cast_nullable_to_non_nullable

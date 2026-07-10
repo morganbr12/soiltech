@@ -105,6 +105,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       paymentType: paymentType,
       farmerId: first.product.farmerId,
       agentId: first.product.agentId,
+      region: first.product.location,
+      assignedAgent: first.product.agentName,
     );
     if (ok) ref.read(cartProvider.notifier).clear();
     return ok;

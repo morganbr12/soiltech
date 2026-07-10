@@ -565,6 +565,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                   paymentType: _orderPaymentType,
                                   farmerId: p.farmerId,
                                   agentId: p.agentId,
+                                  region: p.location,
+                                  assignedAgent: p.agentName,
                                 );
                                 if (!context.mounted) return;
                                 Navigator.of(ctx).pop();

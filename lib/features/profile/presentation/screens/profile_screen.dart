@@ -5,9 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app.dart';
 import '../../../../app/core/theme/app_colors.dart';
 import '../../../../shared/extensions/extensions.dart';
-import '../../../../shared/models/dummy_data.dart';
+import '../../../../shared/models/agent_profile.dart';
 import '../../../../shared/widgets/status_badge.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -16,12 +17,59 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final agent = DummyData.agent;
+    final profileAsync = ref.watch(agentProfileProvider);
     final themeMode = ref.watch(themeModeProvider);
 
+    return profileAsync.when(
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 52, color: AppColors.primaryLight),
+              const SizedBox(height: 16),
+              const Text('Could not load profile', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text(e.toString(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: () => ref.invalidate(agentProfileProvider),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      data: (agent) => _ProfileBody(agent: agent, isDark: isDark, theme: theme, themeMode: themeMode, ref: ref),
+    );
+  }
+}
+
+class _ProfileBody extends StatelessWidget {
+  final AgentProfile agent;
+  final bool isDark;
+  final ThemeData theme;
+  final ThemeMode themeMode;
+  final WidgetRef ref;
+
+  const _ProfileBody({
+    required this.agent,
+    required this.isDark,
+    required this.theme,
+    required this.themeMode,
+    required this.ref,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: () async => ref.invalidate(agentProfileProvider),
+        child: CustomScrollView(
+          slivers: [
           SliverAppBar(
             expandedHeight: 240,
             pinned: true,
@@ -353,6 +401,7 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
